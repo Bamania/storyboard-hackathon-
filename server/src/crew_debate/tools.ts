@@ -1,10 +1,151 @@
 /**
- * Coordinator tools for state management during crew debate.
- * These tools give the LLM coordinator maximum control over the debate flow.
+ * Crew Debate Tools — one write tool per role.
+ *
+ * Each agent may ONLY call its own update tool, enforcing parameter ownership.
+ * All agents can READ the shared session state (via instruction template vars).
  */
 
 import { FunctionTool } from '@google/adk';
 import { z } from 'zod';
+
+export const updateDirectorParametersTool = new FunctionTool({
+  name: 'update_director_parameters',
+  description:
+    "Write the Director's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Only the Director calls this.",
+  parameters: z.object({
+    story_beat_action: z
+      .string()
+      .describe('What is happening dramatically in this exact scene moment'),
+    emotional_tone: z
+      .string()
+      .describe('Specific emotional register (e.g. "cold dread", "desperate hope")'),
+    coverage_pacing: z
+      .string()
+      .describe('Shot count and rhythm (e.g. "6 shots — slow build to urgency")'),
+    character_blocking: z
+      .string()
+      .describe('Precise physical staging (e.g. "Cole enters LEFT, sits with back to door")'),
+    dialogue_subtext: z
+      .string()
+      .describe('Unspoken tension beneath the words (e.g. "Viktor knows more — power play")'),
+    directorial_intent: z
+      .string()
+      .describe('One-sentence vision (e.g. "Audience must feel Cole is already too late")'),
+  }),
+  execute: async (input, toolContext) => {
+    const state = toolContext?.state as Record<string, unknown> | undefined;
+    if (!state) throw new Error('No session state available');
+    state['director_parameters'] = { ...input };
+    return { status: 'updated', agent: 'Director', fields: Object.keys(input) };
+  },
+});
+
+export const updateCinematographerParametersTool = new FunctionTool({
+  name: 'update_cinematographer_parameters',
+  description:
+    "Write the Cinematographer's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Only the Cinematographer calls this.",
+  parameters: z.object({
+    focal_length_mm: z
+      .string()
+      .describe('Specific lens (e.g. "35mm — slight wide pressure", "85mm — compressed intimacy")'),
+    aperture_fstop: z
+      .string()
+      .describe('f-stop with rationale (e.g. "f/2.0 — subject isolated from BG clutter")'),
+    camera_angle_tilt: z
+      .string()
+      .describe('Tilt with dramatic reason (e.g. "Low Angle 20° — Cole appears threatening")'),
+    lighting_contrast_ratio: z
+      .string()
+      .describe('Key/fill ratio (e.g. "8:1 — near-noir single hard side key")'),
+    color_temperature_kelvin: z
+      .string()
+      .describe('Exact temp (e.g. "2800K — warm tungsten decay and nostalgia")'),
+    exposure_iso: z
+      .string()
+      .describe('ISO with intent (e.g. "ISO 1600 — visible grain, documentary unease")'),
+  }),
+  execute: async (input, toolContext) => {
+    const state = toolContext?.state as Record<string, unknown> | undefined;
+    if (!state) throw new Error('No session state available');
+    state['cinematographer_parameters'] = { ...input };
+    return { status: 'updated', agent: 'Cinematographer', fields: Object.keys(input) };
+  },
+});
+
+export const updateProductionDesignerParametersTool = new FunctionTool({
+  name: 'update_production_designer_parameters',
+  description:
+    "Write the Production Designer's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Only the Production Designer calls this.",
+  parameters: z.object({
+    z_axis_clutter: z
+      .string()
+      .describe(
+        'Foreground/midground/background layering (e.g. "dense FG debris — claustrophobic, clear BG exit visible")',
+      ),
+    volumetrics_atmosphere: z
+      .string()
+      .describe('Fog, smoke, rain presence (e.g. "light fog 30% density — mystery without obscuring faces")'),
+    location_set_geometry: z
+      .string()
+      .describe('Space shape and sightlines (e.g. "narrow L-corridor — blind corner anxiety")'),
+    color_palette: z
+      .string()
+      .describe('Dominant palette (e.g. "desaturated steels and burnt ambers — fatigue and decay")'),
+    texture_materiality: z
+      .string()
+      .describe('Key surfaces (e.g. "peeling plaster, rusted iron railing, scuffed concrete — post-industrial")'),
+    practical_lights: z
+      .string()
+      .describe(
+        'Exact practical sources in frame (e.g. "overhead fluorescent flicker 2Hz, red EXIT sign back-right")',
+      ),
+  }),
+  execute: async (input, toolContext) => {
+    const state = toolContext?.state as Record<string, unknown> | undefined;
+    if (!state) throw new Error('No session state available');
+    state['production_designer_parameters'] = { ...input };
+    return { status: 'updated', agent: 'ProductionDesigner', fields: Object.keys(input) };
+  },
+});
+
+export const updateEditorParametersTool = new FunctionTool({
+  name: 'update_editor_parameters',
+  description:
+    "Write the Editor's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Only the Editor calls this.",
+  parameters: z.object({
+    aspect_ratio: z
+      .string()
+      .describe('Format with rationale (e.g. "2.39:1 — anamorphic scale and weight")'),
+    eye_lines_180_rule: z
+      .string()
+      .describe(
+        'Axis management (e.g. "strict axis — Cole LEFT throughout", "axis break on cut 5 for disorientation")',
+      ),
+    match_cuts: z
+      .string()
+      .describe(
+        'Specific cut points (e.g. "cut on Cole reaching for glass — action match to CU", "L-cut audio bleeds in")',
+      ),
+    character_motion_arrows: z
+      .string()
+      .describe('Direction vectors across cuts (e.g. "L→R dominant — reversal on reveal for shock")'),
+    camera_motion_arrows: z
+      .string()
+      .describe(
+        'Camera moves across scene (e.g. "handheld push-in during confession, snap-cut to static wide for aftermath")',
+      ),
+    duration_timing: z
+      .string()
+      .describe('Total duration and shot breakdown (e.g. "2m10s — 8s WS, 4s MS×3, 2s CU×4, 12s final hold")'),
+  }),
+  execute: async (input, toolContext) => {
+    const state = toolContext?.state as Record<string, unknown> | undefined;
+    if (!state) throw new Error('No session state available');
+    state['editor_parameters'] = { ...input };
+    return { status: 'updated', agent: 'Editor', fields: Object.keys(input) };
+  },
+});
+
 
 /**
  * Appends a crew member's message to the debate transcript.

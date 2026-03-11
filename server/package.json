@@ -19,6 +19,7 @@
     "@google-cloud/opentelemetry-cloud-trace-exporter": "^3.0.0",
     "@google-cloud/storage": "^7.19.0",
     "@google/adk": "^0.4.0",
+    "@google/adk-devtools": "^0.5.0",
     "@google/genai": "^1.44.0",
     "@mikro-orm/mariadb": "^6.6.9",
     "@mikro-orm/mssql": "^6.6.9",

@@ -120,19 +120,48 @@ app.post('/api/debate', async (req, res) => {
     const userId = `user_${Date.now()}`;
     const sessionId = `session_${Date.now()}`;
 
-    const initialState = {
-      scenes,
-      scene_index: 0,
-      total_scenes: scenes.length,
-      debate_round: 0,
-      debate_transcript: [] as Array<{ agent: string; message: string }>,
-      debate_transcript_formatted: '(No contributions yet)',
-      consensus_reached: false,
-      shot_parameters: {} as Record<string, unknown>,
-      completed_scenes: [] as SceneContext[],
-      characters,
-    };
-
+  const initialState = {
+    // Scenes array — the orchestrator iterates over this
+    scenes,
+    // 24 parameters — reset per-scene by the orchestrator; seeded here as defaults
+    director_parameters: {
+      story_beat_action: '',
+      emotional_tone: '',
+      coverage_pacing: '',
+      character_blocking: '',
+      dialogue_subtext: '',
+      directorial_intent: '',
+    },
+    cinematographer_parameters: {
+      focal_length_mm: '',
+      aperture_fstop: '',
+      camera_angle_tilt: '',
+      lighting_contrast_ratio: '',
+      color_temperature_kelvin: '',
+      exposure_iso: '',
+    },
+    production_designer_parameters: {
+      z_axis_clutter: '',
+      volumetrics_atmosphere: '',
+      location_set_geometry: '',
+      color_palette: '',
+      texture_materiality: '',
+      practical_lights: '',
+    },
+    editor_parameters: {
+      aspect_ratio: '',
+      eye_lines_180_rule: '',
+      match_cuts: '',
+      character_motion_arrows: '',
+      camera_motion_arrows: '',
+      duration_timing: '',
+    },
+    // Completion signals written by the orchestrator after each scene's 2 rounds
+    last_scene_complete_index: -1,
+    last_scene_parameters: null,
+  };
+  
+  // session creation !
     await runner.sessionService.createSession({
       appName: APP_NAME,
       userId,
@@ -168,57 +197,18 @@ app.post('/api/debate', async (req, res) => {
         if (text && CREW_AGENTS.has(author)) {
           sendEvent({ type: 'debate_chunk', agent: author, chunk: text, done: !isPartial });
         }
-        const fc = part.functionCall ?? part.function_call;
-        if (fc && typeof fc === 'object') {
-          const fn = fc as { name?: string; args?: Record<string, unknown> };
-          if (fn.name === 'append_to_debate' && fn.args) {
-            const agent = fn.args.agent_name as string;
-            const message = fn.args.message as string;
-            if (agent && message) {
-              sendEvent({ type: 'debate_message', agent, message });
-            }
-          }
-        }
-        const fr = part.functionResponse ?? part.function_response;
-        if (fr && typeof fr === 'object') {
-          const fnr = fr as { name?: string };
-          if (fnr.name === 'set_consensus_reached' || fnr.name === 'update_shot_parameters') {
-            const session = await runner.sessionService.getSession({
-              appName: APP_NAME,
-              userId,
-              sessionId,
-            });
-            const si = (session?.state?.['scene_index'] as number) ?? 0;
-            let params = session?.state?.['shot_parameters'] as Record<string, unknown>;
-            const scene = scenes[si];
-            if (!params || Object.keys(params).length === 0) {
-              params = {
-                scene_slug: scene?.slug,
-                location: scene?.location,
-                time_of_day: scene?.timeOfDay,
-                shot_count: 3,
-                director_summary: session?.state?.['director_response'] ?? '',
-                cinematographer_summary: session?.state?.['dp_response'] ?? '',
-                editor_summary: session?.state?.['editor_response'] ?? '',
-                production_designer_summary: session?.state?.['pd_response'] ?? '',
-                debate_complete: true,
-              };
-            }
-            if (si > lastEmittedSceneComplete) {
-              sendEvent({ type: 'scene_complete', scene_index: si, shot_parameters: params ?? {} });
-              lastEmittedSceneComplete = si;
-            }
-          }
-        }
       }
 
+      // Poll session state after every event to detect scene transitions
       const session = await runner.sessionService.getSession({
         appName: APP_NAME,
         userId,
         sessionId,
       });
+
+      // scene_start: new scene has begun (orchestrator advanced scene_index)
       const currentSceneIndex = (session?.state?.['scene_index'] as number) ?? 0;
-      if (currentSceneIndex > lastSceneIndex && currentSceneIndex > lastEmittedSceneComplete) {
+      if (currentSceneIndex > lastSceneIndex) {
         const scene = scenes[currentSceneIndex];
         sendEvent({
           type: 'scene_start',
@@ -228,6 +218,14 @@ app.post('/api/debate', async (req, res) => {
         });
         lastSceneIndex = currentSceneIndex;
       }
+
+      // scene_complete: orchestrator finished 2 rounds for a scene
+      const lastComplete = (session?.state?.['last_scene_complete_index'] as number) ?? -1;
+      if (lastComplete >= 0 && lastComplete > lastEmittedSceneComplete) {
+        const sceneParams = session?.state?.['last_scene_parameters'] as Record<string, unknown>;
+        sendEvent({ type: 'scene_complete', scene_index: lastComplete, shot_parameters: sceneParams ?? {} });
+        lastEmittedSceneComplete = lastComplete;
+      }
     }
 
     const finalSession = await runner.sessionService.getSession({
@@ -236,37 +234,14 @@ app.post('/api/debate', async (req, res) => {
       sessionId,
     });
 
-    let shotParams = finalSession?.state?.['shot_parameters'] as Record<string, unknown>;
-    const completedScenes = (finalSession?.state?.['completed_scenes'] as SceneContext[]) ?? [];
-
-    const lastScene = scenes[scenes.length - 1];
-    if (!shotParams || Object.keys(shotParams).length === 0) {
-      shotParams = {
-        scene_slug: lastScene?.slug,
-        location: lastScene?.location,
-        time_of_day: lastScene?.timeOfDay,
-        shot_count: 3,
-        director_summary: finalSession?.state?.['director_response'] ?? '',
-        cinematographer_summary: finalSession?.state?.['dp_response'] ?? '',
-        editor_summary: finalSession?.state?.['editor_response'] ?? '',
-        production_designer_summary: finalSession?.state?.['pd_response'] ?? '',
-        debate_complete: true,
-      };
+    // Emit scene_complete for the last scene if the loop exited before we could poll it
+    const finalLastComplete = (finalSession?.state?.['last_scene_complete_index'] as number) ?? -1;
+    if (finalLastComplete >= 0 && finalLastComplete > lastEmittedSceneComplete) {
+      const sceneParams = finalSession?.state?.['last_scene_parameters'] as Record<string, unknown>;
+      sendEvent({ type: 'scene_complete', scene_index: finalLastComplete, shot_parameters: sceneParams ?? {} });
     }
 
-    if (lastEmittedSceneComplete < scenes.length - 1) {
-      sendEvent({
-        type: 'scene_complete',
-        scene_index: scenes.length - 1,
-        shot_parameters: shotParams ?? {},
-      });
-    }
-
-    sendEvent({
-      type: 'done',
-      shot_parameters: shotParams ?? {},
-      completed_scenes: completedScenes,
-    });
+    sendEvent({ type: 'done' });
   } catch (err) {
     console.error('[Debate] Error:', err);
     sendEvent({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' });

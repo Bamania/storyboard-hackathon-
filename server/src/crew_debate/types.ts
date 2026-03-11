@@ -1,14 +1,8 @@
 /**
  * Types for the Crew Debate (Shot Generation) system.
  * 4 AI agents: Director, Cinematographer, Editor, Production Designer
+ * Each agent owns 6 parameters → 24 total per scene.
  */
-
-export interface DebateMessage {
-  agent: 'Director' | 'Cinematographer' | 'Editor' | 'ProductionDesigner';
-  message: string;
-  timestamp: number;
-  isConsensus?: boolean;
-}
 
 export interface SceneContext {
   slug: string;
@@ -18,39 +12,52 @@ export interface SceneContext {
   timeOfDay: string;
 }
 
-export interface ShotParameters {
-  focal_length?: string;
-  camera_angle?: string;
-  shot_size?: string;
-  key_light?: string;
-  light_quality?: string;
-  era?: string;
-  set_condition?: string;
-  movement?: string;
-  aspect_ratio?: string;
-  shot_count?: number;
-  [key: string]: string | number | undefined;
+/** The 6 parameters owned exclusively by the Director. */
+export interface DirectorParameters {
+  story_beat_action: string;
+  emotional_tone: string;
+  coverage_pacing: string;
+  character_blocking: string;
+  dialogue_subtext: string;
+  directorial_intent: string;
 }
 
-export interface CrewDebateState {
-  current_scene: SceneContext;
+/** The 6 parameters owned exclusively by the Cinematographer. */
+export interface CinematographerParameters {
+  focal_length_mm: string;
+  aperture_fstop: string;
+  camera_angle_tilt: string;
+  lighting_contrast_ratio: string;
+  color_temperature_kelvin: string;
+  exposure_iso: string;
+}
+
+/** The 6 parameters owned exclusively by the Production Designer. */
+export interface ProductionDesignerParameters {
+  z_axis_clutter: string;
+  volumetrics_atmosphere: string;
+  location_set_geometry: string;
+  color_palette: string;
+  texture_materiality: string;
+  practical_lights: string;
+}
+
+/** The 6 parameters owned exclusively by the Editor. */
+export interface EditorParameters {
+  aspect_ratio: string;
+  eye_lines_180_rule: string;
+  match_cuts: string;
+  character_motion_arrows: string;
+  camera_motion_arrows: string;
+  duration_timing: string;
+}
+
+/** The complete 24-parameter output for a single scene. */
+export interface SceneParameters {
+  scene_slug: string;
   scene_index: number;
-  total_scenes: number;
-  debate_transcript: DebateMessage[];
-  shot_parameters: ShotParameters;
-  consensus_reached: boolean;
-  characters: Array<{ name: string; description: string; color: string }>;
-  completed_scenes: SceneContext[];
-  frames: FrameDefinition[];
-}
-
-export interface FrameDefinition {
-  scene_ref: string;
-  shot_title: string;
-  description: string;
-  characters: string[];
-  focal_length?: string;
-  aperture?: string;
-  color_temp?: string;
-  shot_type?: string;
+  director_parameters: DirectorParameters;
+  cinematographer_parameters: CinematographerParameters;
+  production_designer_parameters: ProductionDesignerParameters;
+  editor_parameters: EditorParameters;
 }
