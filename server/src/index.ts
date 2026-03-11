@@ -111,7 +111,7 @@ app.post('/api/debate', async (req, res) => {
 
   try {
     const characters = deriveCharactersFromScenes(scenes);
-
+    // creating a runner for the Sceneorchestration agent in here,with runner we can create the session and everything !
     const runner = new InMemoryRunner({
       agent: sceneOrchestrator,
       appName: APP_NAME,

@@ -1,0 +1,114 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── STORYBOARD ───────────────────────────────────────────────────────────────
+// Top-level project: one per user submission.
+// Holds the original prompt, the generated script, and production status.
+
+model Storyboard {
+  id          Int          @id @default(autoincrement())
+  title       String
+  prompt      String       // The original user prompt
+  script      String       // Full generated screenplay text
+  status      BoardStatus  @default(DRAFT)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  cast        CastMember[]
+  scenes      Scene[]
+}
+
+enum BoardStatus {
+  DRAFT       // Script generated, not yet debated
+  DEBATING    // Crew debate in progress
+  COMPLETE    // All scenes have artboards
+}
+
+// ─── CAST MEMBER ──────────────────────────────────────────────────────────────
+// Characters appearing in this storyboard.
+
+model CastMember {
+  id           Int        @id @default(autoincrement())
+  storyboardId Int
+  name         String
+  description  String?
+  color        String?    // Hex colour used in the UI (#C4724B etc.)
+
+  storyboard   Storyboard @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
+}
+
+// ─── SCENE ────────────────────────────────────────────────────────────────────
+// One screenplay sequence (INT./EXT. slug block).
+
+model Scene {
+  id           Int        @id @default(autoincrement())
+  storyboardId Int
+  position     Int        // 0-based order within the storyboard
+  slug         String     // e.g. "EXT. ROOFTOP — NIGHT"
+  body         String     // Screenplay action/dialogue text
+  characters   String[]   // Character names present in this scene
+  location     String
+  timeOfDay    String
+
+  storyboard   Storyboard @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
+  artboards    Artboard[]
+
+  @@index([storyboardId, position])
+}
+
+// ─── ARTBOARD ─────────────────────────────────────────────────────────────────
+// One generated image slot per scene.
+// Stores the full 24-parameter debate output + assembled shot description + image result.
+
+model Artboard {
+  id          Int             @id @default(autoincrement())
+  sceneId     Int
+  position    Int             @default(0)  // Supports multiple shots per scene later
+  status      ArtboardStatus  @default(PENDING)
+
+  // Assembled natural-language prompt sent to the image generator
+  shotDescription  String?
+
+  // URL / storage key of the generated image
+  imageUrl         String?
+
+  // ── 24 crew parameters stored as typed JSON blocks (one per role) ──────────
+  // Director (6 params)
+  directorParams         Json?
+  // Cinematographer (6 params)
+  cinematographerParams  Json?
+  // Production Designer (6 params)
+  productionDesignerParams Json?
+  // Editor (6 params)
+  editorParams           Json?
+
+  // Generation metadata
+  generationDurationMs  Int?
+  errorMessage          String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  scene       Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([sceneId, position])
+}
+
+enum ArtboardStatus {
+  PENDING     // Params not yet debated
+  PARAMS_READY // 24 params filled, image not yet generated
+  GENERATING  // Image generation in-flight
+  DONE        // Image URL available
+  FAILED      // Generation error
+}
