@@ -2,10 +2,14 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useCastStore } from '../../stores/castStore';
+import { useStoryStore } from '../../stores/storyStore';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { mockCharacters, getCrewFeedback, getVariants } from '../../data/mockCast';
 import type { CrewFeedback, Variant } from '../../data/mockCast';
 import { agents } from '../../theme/tokens';
+import type { Character } from '../../types';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 
 type CharPhase = 'idle' | 'regenerating' | 'feedback' | 'variants';
@@ -27,9 +31,9 @@ const INITIAL_UI: CharUIState = {
 };
 
 /* ── 3D Carousel constants ── */
-const CARD_W = 260;
-const CARD_H = 380;
-const CYLINDER_RADIUS = 380;
+const CARD_W = 280;
+const CARD_H = 440;
+const CYLINDER_RADIUS = 400;
 const ANGLE_STEP = 52; // degrees between adjacent cards
 const BASE_Z = 80;     // translateZ for the front card
 
@@ -46,10 +50,12 @@ const CastSheet: React.FC = () => {
     lockCharacter,
     unlockCharacter,
   } = useCastStore();
+  const { storyboardId } = useStoryStore();
   const allLocked = characters.length > 0 && characters.every((c) => c.isLocked);
 
   /* ── State ── */
   const [uiState, setUIState] = useState<Record<string, CharUIState>>({});
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editingDesc, setEditingDesc] = useState<string | null>(null);
   const [mentionInput, setMentionInput] = useState('');
@@ -62,10 +68,42 @@ const CastSheet: React.FC = () => {
   const wheelCooldown = useRef(false);
   const touchStartX = useRef(0);
 
-  /* ── Init mock data ── */
+  /* ── Fetch cast images from API (or fall back to mock data) ── */
   useEffect(() => {
-    if (characters.length === 0) setCharacters(mockCharacters);
-  }, []);
+    if (characters.length === 0 && !storyboardId) {
+      setCharacters(mockCharacters);
+      return;
+    }
+    if (!storyboardId) return;
+    // Only fetch if no character has a referenceImage yet
+    if (characters.some((c) => c.referenceImage)) return;
+
+    let cancelled = false;
+    setIsLoadingImages(true);
+    fetch(`${API_BASE}/api/cast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storyboardId }),
+    })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((data) => {
+        if (cancelled) return;
+        const castFromApi: Character[] = (data.cast || []).map((c: { id: string; name: string; description: string; color: string; image: string }, i: number) => ({
+          id: c.id || `char-${i + 1}`,
+          name: c.name,
+          age: 'Unknown',
+          description: c.description || 'Character from the screenplay',
+          visualTraits: [],
+          color: c.color || '#C4724B',
+          isLocked: false,
+          referenceImage: c.image || undefined,
+        }));
+        if (castFromApi.length > 0) setCharacters(castFromApi);
+      })
+      .catch((err) => console.error('Failed to fetch cast images:', err))
+      .finally(() => { if (!cancelled) setIsLoadingImages(false); });
+    return () => { cancelled = true; };
+  }, [storyboardId]);
 
   /* ── Keyboard navigation ── */
   useEffect(() => {
@@ -443,6 +481,24 @@ const CastSheet: React.FC = () => {
         {/* ═══════════════════════════════════════
             3D CYLINDRICAL CAROUSEL
            ═══════════════════════════════════════ */}
+        {isLoadingImages && (
+          <div style={{
+            textAlign: 'center',
+            padding: '32px 0',
+            color: '#8A7E72',
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+          }}>
+            <span style={{
+              display: 'inline-block',
+              animation: 'avatarSpin 1.5s linear infinite',
+              marginRight: 8,
+              fontSize: 18,
+            }}>↻</span>
+            Generating cast portraits…
+          </div>
+        )}
         {characters.length > 0 && (
           <div style={{ position: 'relative', marginBottom: 28 }}>
             {/* Carousel scene — establishes perspective */}
@@ -595,52 +651,53 @@ const CastSheet: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Portrait area (top 62%) */}
+                      {/* Portrait area (top 52%) */}
                       <div
                         style={{
-                          height: '62%',
+                          height: '52%',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           background: `linear-gradient(150deg, ${char.color}15 0%, ${char.color}06 50%, transparent 100%)`,
                           position: 'relative',
+                          padding: 12,
                         }}
                       >
-                        {/* Outer decorative ring */}
+                        {/* Rectangular portrait frame */}
                         <div
                           style={{
-                            width: 136,
-                            height: 136,
-                            borderRadius: '50%',
-                            border: `3px solid ${char.color}22`,
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: 12,
+                            border: `3px solid ${char.color}33`,
+                            overflow: 'hidden',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            backgroundColor: 'rgba(255,255,255,0.85)',
+                            fontFamily: '"Playfair Display", Georgia, serif',
+                            fontSize: 52,
+                            fontWeight: 700,
+                            color: char.color,
+                            animation: isSpinning
+                              ? 'avatarSpin 1.2s linear infinite'
+                              : 'none',
+                            boxShadow: `0 6px 24px ${char.color}20`,
                           }}
                         >
-                          {/* Inner avatar circle */}
-                          <div
-                            style={{
-                              width: 112,
-                              height: 112,
-                              borderRadius: '50%',
-                              border: `4px solid ${char.color}`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              backgroundColor: 'rgba(255,255,255,0.85)',
-                              fontFamily: '"Playfair Display", Georgia, serif',
-                              fontSize: 44,
-                              fontWeight: 700,
-                              color: char.color,
-                              animation: isSpinning
-                                ? 'avatarSpin 1.2s linear infinite'
-                                : 'none',
-                              boxShadow: `0 6px 24px ${char.color}20`,
-                            }}
-                          >
-                            {initial}
-                          </div>
+                          {char.referenceImage ? (
+                            <img
+                              src={char.referenceImage}
+                              alt={char.name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                              }}
+                            />
+                          ) : (
+                            initial
+                          )}
                         </div>
 
                         {/* Reimagining label */}
@@ -670,51 +727,90 @@ const CastSheet: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Info area (bottom 38%) */}
+                      {/* Info area (bottom 48%) */}
                       <div
                         style={{
-                          height: '38%',
-                          padding: '14px 20px',
+                          height: '48%',
+                          padding: '12px 18px 14px',
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
-                          justifyContent: 'center',
                           textAlign: 'center',
+                          borderTop: `1px solid ${char.color}15`,
                         }}
                       >
-                        <h3
-                          style={{
-                            fontFamily: '"Playfair Display", Georgia, serif',
-                            fontSize: 17,
-                            fontWeight: 700,
-                            color: '#2C2C2C',
-                            marginBottom: 3,
-                            letterSpacing: '0.01em',
-                          }}
-                        >
-                          {char.name}
-                        </h3>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            color: char.color,
-                            fontWeight: 600,
-                            letterSpacing: '0.1em',
-                            textTransform: 'uppercase',
-                            marginBottom: 10,
-                          }}
-                        >
-                          {char.age}
-                        </span>
+                        {/* Color dot + name */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <div style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            backgroundColor: char.color,
+                            boxShadow: `0 0 6px ${char.color}55`,
+                          }} />
+                          <h3
+                            style={{
+                              fontFamily: '"Playfair Display", Georgia, serif',
+                              fontSize: 17,
+                              fontWeight: 700,
+                              color: '#2C2C2C',
+                              letterSpacing: '0.01em',
+                              margin: 0,
+                            }}
+                          >
+                            {char.name}
+                          </h3>
+                        </div>
+
+                        {/* Age or role tag */}
+                        {char.age && char.age !== 'Unknown' && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: char.color,
+                              fontWeight: 600,
+                              letterSpacing: '0.1em',
+                              textTransform: 'uppercase',
+                              marginBottom: 6,
+                            }}
+                          >
+                            {char.age}
+                          </span>
+                        )}
+
+                        {/* Description snippet */}
+                        {char.description && (
+                          <p
+                            style={{
+                              fontSize: 10,
+                              lineHeight: 1.5,
+                              color: '#5A5248',
+                              margin: '2px 0 8px',
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              fontFamily: '"Inter", system-ui, sans-serif',
+                            }}
+                          >
+                            {char.description}
+                          </p>
+                        )}
+
+                        {/* Visual trait pills */}
                         <div
                           style={{
                             display: 'flex',
                             gap: 4,
                             flexWrap: 'wrap',
                             justifyContent: 'center',
+                            marginTop: 'auto',
                           }}
                         >
-                          {char.visualTraits.slice(0, 2).map((trait, idx) => (
+                          {(char.visualTraits.length > 0
+                            ? char.visualTraits
+                            : char.description
+                              ? char.description.split(/[,.]/).slice(0, 3).map(s => s.trim()).filter(Boolean)
+                              : []
+                          ).slice(0, 3).map((trait, idx) => (
                             <span
                               key={idx}
                               style={{
@@ -723,6 +819,10 @@ const CastSheet: React.FC = () => {
                                 backgroundColor: 'rgba(0,0,0,0.04)',
                                 padding: '2px 9px',
                                 borderRadius: 10,
+                                maxWidth: 100,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
                               }}
                             >
                               {trait}
