@@ -4,6 +4,7 @@ import Navbar from '../../components/Navbar/Navbar';
 import { useCastStore } from '../../stores/castStore';
 import { mockCharacters, getCrewFeedback, getVariants } from '../../data/mockCast';
 import type { CrewFeedback, Variant } from '../../data/mockCast';
+import { agents } from '../../theme/tokens';
 
 /**
  * Page 3 — Cast Sheet  (3D Cylindrical Carousel Edition)
@@ -58,6 +59,8 @@ const CastSheet: React.FC = () => {
   const [editingDesc, setEditingDesc] = useState<string | null>(null);
   const [mentionInput, setMentionInput] = useState('');
   const [showMentionFor, setShowMentionFor] = useState<string | null>(null);
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
+  const [agentHighlight, setAgentHighlight] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const mentionRef = useRef<HTMLInputElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -93,12 +96,13 @@ const CastSheet: React.FC = () => {
     const el = carouselRef.current;
     if (!el || characters.length <= 1) return;
     const onWheel = (e: WheelEvent) => {
+      // Only respond to horizontal scroll — ignore vertical (two-finger up/down)
+      if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
       e.preventDefault();
       if (wheelCooldown.current) return;
       wheelCooldown.current = true;
       setTimeout(() => { wheelCooldown.current = false; }, 550);
-      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      if (d > 0) setActiveIndex((p) => (p + 1) % characters.length);
+      if (e.deltaX > 0) setActiveIndex((p) => (p + 1) % characters.length);
       else setActiveIndex((p) => (p - 1 + characters.length) % characters.length);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -150,6 +154,84 @@ const CastSheet: React.FC = () => {
     if (char) startRegenerate(charId, char.name);
     setMentionInput('');
     setShowMentionFor(null);
+    setShowAgentDropdown(false);
+  };
+
+  /* ── Agent dropdown for @-mentions ── */
+  const AGENT_LIST = [
+    { key: 'director',           shortcut: '@dir', label: 'Director',         subtitle: 'Story & Emotion',  color: agents.director.color },
+    { key: 'cinematographer',    shortcut: '@dp',  label: 'Cinematographer',  subtitle: 'Camera & Light',   color: agents.cinematographer.color },
+    { key: 'editor',             shortcut: '@ed',  label: 'Editor',           subtitle: 'Pacing & Flow',    color: agents.editor.color },
+    { key: 'productionDesigner', shortcut: '@pd',  label: 'Prod. Designer',   subtitle: 'World & Palette',  color: agents.productionDesigner.color },
+  ];
+
+  // Extract the text typed after the last @ to filter agents
+  const getMentionQuery = (val: string): string => {
+    const lastAt = val.lastIndexOf('@');
+    if (lastAt === -1) return '';
+    const afterAt = val.slice(lastAt + 1);
+    return afterAt.includes(' ') ? '' : afterAt.toLowerCase();
+  };
+
+  // Filter agents based on what's typed after @
+  const mentionQuery = getMentionQuery(mentionInput);
+  const filteredAgents = showAgentDropdown
+    ? AGENT_LIST.filter(
+        (a) =>
+          a.shortcut.toLowerCase().includes('@' + mentionQuery)
+          // a.label.toLowerCase().includes(mentionQuery) ||
+          // a.key.toLowerCase().includes(mentionQuery)
+      )
+    : [];
+
+  const handleMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setMentionInput(val);
+    const lastAt = val.lastIndexOf('@');
+    if (lastAt !== -1) {
+      const afterAt = val.slice(lastAt + 1);
+      if (!afterAt.includes(' ')) {
+        setShowAgentDropdown(true);
+        setAgentHighlight(0);
+      } else {
+        setShowAgentDropdown(false);
+      }
+    } else {
+      setShowAgentDropdown(false);
+    }
+  };
+
+  const selectAgent = (agent: typeof AGENT_LIST[number]) => {
+    const lastAt = mentionInput.lastIndexOf('@');
+    const before = lastAt >= 0 ? mentionInput.slice(0, lastAt) : mentionInput;
+    setMentionInput(before + agent.shortcut + ' ');
+    setShowAgentDropdown(false);
+    mentionRef.current?.focus();
+  };
+
+  const handleMentionKeyDown = (e: React.KeyboardEvent, charId: string) => {
+    if (showAgentDropdown && filteredAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAgentHighlight((p) => (p + 1) % filteredAgents.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAgentHighlight((p) => (p - 1 + filteredAgents.length) % filteredAgents.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        selectAgent(filteredAgents[agentHighlight]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowAgentDropdown(false);
+        return;
+      }
+    }
+    if (e.key === 'Enter') handleMentionSubmit(charId);
   };
 
   /* ═══════════════════════════════════════
@@ -781,51 +863,111 @@ const CastSheet: React.FC = () => {
                 : '0 10px 40px rgba(0,0,0,0.06)',
             }}
           >
-            {/* ✕ Delete */}
-            {!activeChar.isLocked &&
-              activeUI.phase === 'idle' &&
-              characters.length > 1 && (
+            {/* ── Top-right action buttons (Lock + Delete) ── */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                zIndex: 2,
+              }}
+            >
+              {/* Lock / Unlock */}
+              {activeUI.phase === 'idle' && (
                 <button
                   style={{
-                    position: 'absolute',
-                    top: 16,
-                    right: 16,
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
-                    border: 'none',
-                    backgroundColor: 'rgba(0,0,0,0.06)',
-                    color: '#8A7E72',
-                    cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 14,
+                    gap: 5,
+                    padding: '5px 14px',
+                    backgroundColor: 'transparent',
+                    border: activeChar.isLocked
+                      ? `1.5px solid ${activeChar.color}`
+                      : '1.5px solid #D8CCBA',
+                    borderRadius: 8,
+                    fontSize: 12,
                     fontWeight: 600,
-                    transition: 'background 0.15s',
-                    zIndex: 2,
+                    color: activeChar.isLocked ? activeChar.color : '#8A7E72',
+                    cursor: 'pointer',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s',
+                    height: 28,
                   }}
-                  title="Remove character"
-                  onClick={() => deleteCharacter(activeChar.id)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.12)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.06)';
-                  }}
+                  onClick={() =>
+                    activeChar.isLocked
+                      ? unlockCharacter(activeChar.id)
+                      : lockCharacter(activeChar.id)
+                  }
                 >
-                  ✕
+                  {activeChar.isLocked ? (
+                    <>
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke={activeChar.color}
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      ✓ Locked
+                    </>
+                  ) : (
+                    'Lock'
+                  )}
                 </button>
               )}
 
-            {/* ── Name + Lock row ── */}
+              {/* ✕ Delete */}
+              {!activeChar.isLocked &&
+                activeUI.phase === 'idle' &&
+                characters.length > 1 && (
+                  <button
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      border: 'none',
+                      backgroundColor: 'rgba(0,0,0,0.06)',
+                      color: '#8A7E72',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      transition: 'background 0.15s',
+                    }}
+                    title="Remove character"
+                    onClick={() => deleteCharacter(activeChar.id)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.06)';
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+            </div>
+
+            {/* ── Name row ── */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 marginBottom: 6,
                 gap: 14,
+                paddingRight: 110,
               }}
             >
               {editingName === activeChar.id ? (
@@ -868,56 +1010,6 @@ const CastSheet: React.FC = () => {
                 >
                   {activeChar.name}
                 </span>
-              )}
-
-              {activeUI.phase === 'idle' && (
-                <button
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '7px 18px',
-                    backgroundColor: 'transparent',
-                    border: activeChar.isLocked
-                      ? `1.5px solid ${activeChar.color}`
-                      : '1.5px solid #D8CCBA',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: activeChar.isLocked ? activeChar.color : '#8A7E72',
-                    cursor: 'pointer',
-                    fontFamily: '"Inter", system-ui, sans-serif',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.2s',
-                    flexShrink: 0,
-                  }}
-                  onClick={() =>
-                    activeChar.isLocked
-                      ? unlockCharacter(activeChar.id)
-                      : lockCharacter(activeChar.id)
-                  }
-                >
-                  {activeChar.isLocked ? (
-                    <>
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke={activeChar.color}
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect x="3" y="11" width="18" height="11" rx="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      ✓ Locked
-                    </>
-                  ) : (
-                    'Lock'
-                  )}
-                </button>
               )}
             </div>
 
@@ -1104,43 +1196,151 @@ const CastSheet: React.FC = () => {
               </div>
             )}
 
-            {/* @mention input */}
+            {/* @mention input with agent autocomplete dropdown */}
             {showMentionFor === activeChar.id && (
-              <div style={{ marginTop: 14 }}>
-                <input
-                  ref={mentionRef}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    border: '1.5px solid #D8CCBA',
-                    borderRadius: 10,
-                    fontSize: 12,
-                    fontFamily: '"Inter", system-ui, sans-serif',
-                    color: '#2C2C2C',
-                    outline: 'none',
-                    backgroundColor: 'rgba(255,255,255,0.7)',
-                    boxSizing: 'border-box',
-                  }}
-                  placeholder={`e.g. @dir Make ${activeChar.name} look more worn…`}
-                  value={mentionInput}
-                  onChange={(e) => setMentionInput(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === 'Enter' && handleMentionSubmit(activeChar.id)
-                  }
-                  autoFocus
-                />
-                <p
-                  style={{
-                    fontSize: 10,
-                    color: '#B8AFA4',
-                    marginTop: 6,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Use <strong>@dir</strong> (Director) · <strong>@dp</strong>{' '}
-                  (DP) · <strong>@ed</strong> (Editor) · <strong>@pd</strong>{' '}
-                  (PD) — then press Enter
-                </p>
+              <div style={{ marginTop: 14, position: 'relative' }}>
+
+                {/* Agent autocomplete dropdown — appears above the input */}
+                {showAgentDropdown && filteredAgents.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: 0,
+                      right: 0,
+                      marginBottom: 6,
+                      background: '#FFFFFF',
+                      borderRadius: 14,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+                      padding: '8px 0',
+                      zIndex: 100,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {filteredAgents.map((agent, idx) => (
+                      <div
+                        key={agent.key}
+                        onClick={() => selectAgent(agent)}
+                        onMouseEnter={() => setAgentHighlight(idx)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '12px 18px',
+                          cursor: 'pointer',
+                          background:
+                            idx === agentHighlight
+                              ? 'rgba(107, 140, 166, 0.08)'
+                              : 'transparent',
+                          borderLeft:
+                            idx === agentHighlight
+                              ? `3px solid ${agent.color}`
+                              : '3px solid transparent',
+                          transition: 'background 0.15s, border-color 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          {/* Colored dot */}
+                          <div
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              backgroundColor: agent.color,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 600,
+                                color: '#2C2C2C',
+                                fontFamily: '"Inter", system-ui, sans-serif',
+                              }}
+                            >
+                              {agent.shortcut}
+                              <span style={{ fontWeight: 400, color: '#5A5248' }}>
+                                {' — '}
+                                {agent.label}
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: '#8A7E72',
+                                marginTop: 2,
+                                fontFamily: '"Inter", system-ui, sans-serif',
+                              }}
+                            >
+                              {agent.subtitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ENTER badge on highlighted item */}
+                        {idx === agentHighlight && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: '#8A7E72',
+                              letterSpacing: '0.08em',
+                              fontFamily: '"Inter", system-ui, sans-serif',
+                            }}
+                          >
+                            ENTER
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input row with send button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                  <input
+                    ref={mentionRef}
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: '1.5px solid #D8CCBA',
+                      borderRadius: '12px 0 0 12px',
+                      fontSize: 14,
+                      fontFamily: '"Inter", system-ui, sans-serif',
+                      color: '#2C2C2C',
+                      outline: 'none',
+                      backgroundColor: 'rgba(255,255,255,0.85)',
+                      boxSizing: 'border-box',
+                    }}
+                    placeholder={`Type @ to mention an agent…`}
+                    value={mentionInput}
+                    onChange={handleMentionInputChange}
+                    onKeyDown={(e) => handleMentionKeyDown(e, activeChar.id)}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => handleMentionSubmit(activeChar.id)}
+                    style={{
+                      padding: '12px 16px',
+                      border: '1.5px solid #D8CCBA',
+                      borderLeft: 'none',
+                      borderRadius: '0 12px 12px 0',
+                      backgroundColor: mentionInput.trim()
+                        ? '#C4724B'
+                        : 'rgba(255,255,255,0.85)',
+                      color: mentionInput.trim() ? '#FFF' : '#B8AFA4',
+                      cursor: mentionInput.trim() ? 'pointer' : 'default',
+                      fontSize: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1391,31 +1591,6 @@ const CastSheet: React.FC = () => {
             {characters.filter((c) => c.isLocked).length} of{' '}
             {characters.length} Characters Locked
           </p>
-          <button
-            style={{
-              padding: '12px 30px',
-              backgroundColor: allLocked
-                ? '#C4724B'
-                : 'rgba(196,114,75,0.12)',
-              color: allLocked ? '#fff' : 'rgba(196,114,75,0.5)',
-              border: allLocked
-                ? '1px solid #C4724B'
-                : '1px solid rgba(196,114,75,0.25)',
-              borderRadius: 10,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: allLocked ? 'pointer' : 'not-allowed',
-              fontFamily: '"Inter", system-ui, sans-serif',
-              opacity: allLocked ? 1 : 0.6,
-              transition: 'all 0.2s',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-            disabled={!allLocked}
-            onClick={() => allLocked && navigate('/shots')}
-          >
-            Continue to Sequencing
-          </button>
           <p
             style={{
               fontSize: 11,
