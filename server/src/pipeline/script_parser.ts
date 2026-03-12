@@ -19,7 +19,7 @@ Each scene must have:
 Output ONLY valid JSON. No markdown, no explanation. Format: [{"slug":"...","body":"...","characters":[],"location":"...","timeOfDay":"..."}]`;
 
 export async function parseScriptToScenes(rawScript: string): Promise<SceneContext[]> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GOOGLE_GENAI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required');
   }

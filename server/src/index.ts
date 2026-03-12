@@ -110,7 +110,7 @@ app.post('/api/debate', async (req, res) => {
   };
 
   try {
-    const characters = deriveCharactersFromScenes(scenes);
+    // const characters = deriveCharactersFromScenes(scenes);
     // creating a runner for the Sceneorchestration agent in here,with runner we can create the session and everything !
     const runner = new InMemoryRunner({
       agent: sceneOrchestrator,
@@ -156,9 +156,19 @@ app.post('/api/debate', async (req, res) => {
       camera_motion_arrows: '',
       duration_timing: '',
     },
+    // Per-scene context — set by the orchestrator before each scene's debate rounds
+    current_scene_slug: '',
+    current_scene_body: '',
+    current_scene_characters: '',
+    current_scene_location: '',
+    current_scene_time: '',
+    scene_index: 0,
+    // Current debate round (1 or 2) — set by the orchestrator each iteration
+    debate_round: 0,
     // Completion signals written by the orchestrator after each scene's 2 rounds
     last_scene_complete_index: -1,
     last_scene_parameters: null,
+    approved:false
   };
   
   // session creation !

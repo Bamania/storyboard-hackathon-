@@ -91,11 +91,15 @@ export class SceneOrchestratorAgent extends BaseAgent {
     }
 
     for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+
       const scene = scenes[sceneIndex];
       if (!scene) continue;
       console.log(`\n[SceneOrchestrator] === Scene ${sceneIndex + 1}/${scenes.length}: ${scene.slug} ===`);
-
-      // Expose scene context so agents can read it via {current_scene_*} template vars
+      // console.log(`\n InvocationContext Object -->`,ctx.session.state.director_parameters);
+      // console.log(`\n InvocationContext Object -->`,ctx.session.state.cinematographer_parameters);
+      // console.log(`\n InvocationContext Object -->`,ctx.session.state.production_designer_parameters);
+      // console.log(`\n InvocationContext Object -->`,ctx.session.state.editor_parameters);
+          
       ctx.session.state['current_scene_slug'] = scene.slug;
       ctx.session.state['current_scene_body'] = scene.body;
       ctx.session.state['current_scene_characters'] = scene.characters.join(', ');
@@ -111,11 +115,16 @@ export class SceneOrchestratorAgent extends BaseAgent {
 
       // 2 rounds: Round 1 = initial proposals; Round 2 = cross-informed revisions
       for (let round = 1; round <= ROUNDS; round++) {
+
         ctx.session.state['debate_round'] = round;
         console.log(`[SceneOrchestrator] Round ${round}/${ROUNDS}`);
 
         for (const agent of CREW_ORDER) {
+
           console.log(`[SceneOrchestrator]   → ${agent.name}`);
+          // if(ctx.session.state["approved"]) {
+          //   break ;
+          // }
           for await (const event of agent.runAsync(ctx)) {
             yield event;
           }
@@ -134,9 +143,11 @@ export class SceneOrchestratorAgent extends BaseAgent {
       };
 
       console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} — Final 24 Parameters:`);
+      console.log("ctx session state",ctx.session.state)
       console.log(JSON.stringify(ctx.session.state['last_scene_parameters'], null, 2));
       console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} parameters written.`);
     }
+
 
     console.log('[SceneOrchestrator] All scenes processed.');
   }
