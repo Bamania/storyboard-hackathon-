@@ -6,7 +6,6 @@ import { useScreenplayStore } from '../../stores/screenplayStore';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { agents } from '../../theme/tokens';
 import { mockScenes } from '../../data/mockScreenplay';
-import PaperDistortion from '../../components/effects/PaperDistortion';
 
 
 /**
@@ -286,8 +285,18 @@ const StoryInput = () => {
         }
       `}</style>
 
-      {/* WebGL paper distortion background */}
-      <PaperDistortion imagePath="/images/background.avif" />
+      {/* Static paper background */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'url(/images/background.avif)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+          zIndex: 0,
+        }}
+      />
 
       {/* Film grain overlay */}
       <svg style={{ position: 'absolute', width: 0, height: 0 }}>
