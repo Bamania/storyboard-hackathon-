@@ -1,17 +1,21 @@
-import { Routes, Route } from 'react-router-dom'
-import StoryInput from './pages/StoryInput'
-import ScriptSequence from './pages/ScriptSequence'
-import ShotDesign from './pages/ShotDesign'
-import './App.css'
+import { Routes, Route, Navigate } from 'react-router-dom';
+import StoryInput from './pages/StoryInput/StoryInput';
+import Screenplay from './pages/Screenplay/Screenplay';
+import CastSheet from './pages/CastSheet/CastSheet';
+import ShotGeneration from './pages/ShotGeneration/ShotGeneration';
+import Storyboard from './pages/Storyboard/Storyboard';
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<StoryInput />} />
-      <Route path="/script" element={<ScriptSequence />} />
-      <Route path="/shot-design" element={<ShotDesign />} />
+      <Route path="/screenplay" element={<Screenplay />} />
+      <Route path="/cast" element={<CastSheet />} />
+      <Route path="/shots" element={<ShotGeneration />} />
+      <Route path="/storyboard" element={<Storyboard />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-  )
+  );
 }
 
-export default App
+export default App;
