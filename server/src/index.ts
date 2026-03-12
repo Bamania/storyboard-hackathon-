@@ -1,5 +1,6 @@
 /**
  * Express server — SSE debate endpoint wired to crew debate + script parser.
+ * Persists all data to PostgreSQL via Prisma.
  */
 
 import 'dotenv/config';
@@ -9,13 +10,16 @@ import express from 'express';
 import { InMemoryRunner, StreamingMode } from '@google/adk';
 import type { RunConfig } from '@google/adk';
 import { createUserContent } from '@google/genai';
+import { PrismaClient } from './generated/prisma/client.js';
 import { sceneOrchestrator } from './crew_debate/scene_orchestrator.js';
 import { parseScriptToScenes } from './pipeline/script_parser.js';
 import { generateScriptFromPrompt } from './pipeline/script_generation.js';
-import type { SceneContext } from './crew_debate/types.js';
+import type { SceneContext, SceneParameters } from './crew_debate/types.js';
 
 const APP_NAME = 'crew_debate';
 const PORT = Number(process.env.PORT) || 3001;
+
+const prisma = new PrismaClient();
 
 const CREW_AGENTS = new Set(['Director', 'Cinematographer', 'Editor', 'ProductionDesigner']);
 
@@ -78,7 +82,49 @@ app.post('/api/generate-and-parse', async (req, res) => {
   try {
     const script = await generateScriptFromPrompt(prompt.trim());
     const scenes = await parseScriptToScenes(script);
-    res.json({ script, scenes });
+    const characters = deriveCharactersFromScenes(scenes);
+
+    // Persist Storyboard → CastMembers + Scenes in a single transaction
+    const storyboard = await prisma.storyboard.create({
+      data: {
+        title: prompt.trim().slice(0, 120),
+        prompt: prompt.trim(),
+        script,
+        status: 'DRAFT',
+        cast: {
+          create: characters.map((c) => ({
+            name: c.name,
+            description: c.description,
+            color: c.color ?? null,
+          })),
+        },
+        scenes: {
+          create: scenes.map((s, i) => ({
+            position: i,
+            slug: s.slug,
+            body: s.body,
+            characters: s.characters,
+            location: s.location,
+            timeOfDay: s.timeOfDay,
+          })),
+        },
+      },
+    });
+
+    // Re-fetch with relations for the response
+    const full = await prisma.storyboard.findUniqueOrThrow({
+      where: { id: storyboard.id },
+      include: { cast: true, scenes: { orderBy: { position: 'asc' } } },
+    });
+
+    console.log(`[GenerateAndParse] Persisted Storyboard #${full.id} with ${full.scenes.length} scenes, ${full.cast.length} cast members`);
+
+    res.json({
+      storyboardId: full.id,
+      script,
+      scenes,
+      cast: full.cast,
+    });
   } catch (err) {
     console.error('[GenerateAndParse] Error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Generate/parse failed' });
@@ -88,6 +134,7 @@ app.post('/api/generate-and-parse', async (req, res) => {
 app.post('/api/debate', async (req, res) => {
   const script = req.body?.script as string | undefined;
   const scenesInput = req.body?.scenes as SceneContext[] | undefined;
+  const storyboardId = req.body?.storyboardId as number | undefined;
 
   let scenes: SceneContext[];
   if (Array.isArray(scenesInput) && scenesInput.length > 0) {
@@ -97,6 +144,18 @@ app.post('/api/debate', async (req, res) => {
   } else {
     res.status(400).json({ error: 'Missing or invalid script or scenes' });
     return;
+  }
+
+  // Look up DB scene IDs so we can link artboards to the correct scene rows
+  let dbSceneIds: number[] = [];
+  if (storyboardId) {
+    await prisma.storyboard.update({ where: { id: storyboardId }, data: { status: 'DEBATING' } });
+    const dbScenes = await prisma.scene.findMany({
+      where: { storyboardId },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+    dbSceneIds = dbScenes.map((s) => s.id);
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -235,6 +294,25 @@ app.post('/api/debate', async (req, res) => {
         const sceneParams = session?.state?.['last_scene_parameters'] as Record<string, unknown>;
         sendEvent({ type: 'scene_complete', scene_index: lastComplete, shot_parameters: sceneParams ?? {} });
         lastEmittedSceneComplete = lastComplete;
+
+        // Persist artboard to DB
+        if (storyboardId && dbSceneIds[lastComplete]) {
+          try {
+            await prisma.artboard.create({
+              data: {
+                sceneId: dbSceneIds[lastComplete],
+                position: 0,
+                status: 'PARAMS_READY',
+                directorParams: (sceneParams?.['director_parameters'] as object) ?? {},
+                cinematographerParams: (sceneParams?.['cinematographer_parameters'] as object) ?? {},
+                productionDesignerParams: (sceneParams?.['production_designer_parameters'] as object) ?? {},
+                editorParams: (sceneParams?.['editor_parameters'] as object) ?? {},
+              },
+            });
+          } catch (dbErr) {
+            console.error(`[Debate] Failed to persist artboard for scene ${lastComplete}:`, dbErr);
+          }
+        }
       }
     }
 
@@ -249,6 +327,30 @@ app.post('/api/debate', async (req, res) => {
     if (finalLastComplete >= 0 && finalLastComplete > lastEmittedSceneComplete) {
       const sceneParams = finalSession?.state?.['last_scene_parameters'] as Record<string, unknown>;
       sendEvent({ type: 'scene_complete', scene_index: finalLastComplete, shot_parameters: sceneParams ?? {} });
+
+      // Persist final artboard
+      if (storyboardId && dbSceneIds[finalLastComplete]) {
+        try {
+          await prisma.artboard.create({
+            data: {
+              sceneId: dbSceneIds[finalLastComplete],
+              position: 0,
+              status: 'PARAMS_READY',
+              directorParams: (sceneParams?.['director_parameters'] as object) ?? {},
+              cinematographerParams: (sceneParams?.['cinematographer_parameters'] as object) ?? {},
+              productionDesignerParams: (sceneParams?.['production_designer_parameters'] as object) ?? {},
+              editorParams: (sceneParams?.['editor_parameters'] as object) ?? {},
+            },
+          });
+        } catch (dbErr) {
+          console.error(`[Debate] Failed to persist final artboard:`, dbErr);
+        }
+      }
+    }
+
+    // Mark storyboard complete
+    if (storyboardId) {
+      await prisma.storyboard.update({ where: { id: storyboardId }, data: { status: 'COMPLETE' } });
     }
 
     sendEvent({ type: 'done' });
@@ -257,6 +359,49 @@ app.post('/api/debate', async (req, res) => {
     sendEvent({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
   } finally {
     res.end();
+  }
+});
+
+// ─── READ ENDPOINTS ───────────────────────────────────────────────────────────
+
+app.get('/api/storyboards', async (_req, res) => {
+  try {
+    const storyboards = await prisma.storyboard.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, status: true, createdAt: true },
+    });
+    res.json(storyboards);
+  } catch (err) {
+    console.error('[ListStoryboards] Error:', err);
+    res.status(500).json({ error: 'Failed to list storyboards' });
+  }
+});
+
+app.get('/api/storyboards/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: 'Invalid storyboard ID' });
+    return;
+  }
+  try {
+    const storyboard = await prisma.storyboard.findUnique({
+      where: { id },
+      include: {
+        cast: true,
+        scenes: {
+          orderBy: { position: 'asc' },
+          include: { artboards: { orderBy: { position: 'asc' } } },
+        },
+      },
+    });
+    if (!storyboard) {
+      res.status(404).json({ error: 'Storyboard not found' });
+      return;
+    }
+    res.json(storyboard);
+  } catch (err) {
+    console.error('[GetStoryboard] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch storyboard' });
   }
 });
 

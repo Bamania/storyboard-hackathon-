@@ -1,75 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
 import { useScreenplayStore } from '../../stores/screenplayStore';
 import { useShotStore } from '../../stores/shotStore';
 import { useNavigationStore } from '../../stores/navigationStore';
+import { useStoryboardStore } from '../../stores/storyboardStore';
+import { useStoryStore } from '../../stores/storyStore';
 import { agentColors } from '../../theme/tokens';
-import type { AgentRole } from '../../types';
+import type { AgentRole, Frame } from '../../types';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 /**
  * Page 3 — Shot Design
- * Crew debates per scene: 4 agents analyse each scene and provide
- * shot notes. The user can navigate scenes, highlight agent notes,
- * and add production notes via a chat-style input.
+ * Crew debates per scene via SSE streaming from /api/debate.
  */
-
-/* ── Mock crew debate data per scene ── */
-interface CrewNote {
-  agent: AgentRole;
-  text: string;
-  approved?: boolean;
-}
-
-const CREW_NOTES: Record<string, CrewNote[]> = {
-  'scene-1': [
-    { agent: 'director', text: 'Open on a wide establishing shot — let the city breathe. Then a slow push into Marcus under the street lamp. 3 shots minimum.' },
-    { agent: 'cinematographer', text: 'Wide 35mm anamorphic for the opener. Push-in on a 50mm. Neon reflections in puddles — low camera, dolly level.' },
-    { agent: 'editor', text: 'Pacing is slow here — let it linger. The V.O. carries the mood. Cut only on the cigarette flick.' },
-    { agent: 'productionDesigner', text: 'Wet pavement, neon signage (magenta + cyan). Period-appropriate street lamp. Trash and puddles for texture.' },
-  ],
-  'scene-2': [
-    { agent: 'director', text: 'Intimate scene — shot/reverse-shot for the dialogue. Elara has the power here; frame her slightly higher.' },
-    { agent: 'cinematographer', text: '85mm portrait lens for close-ups. Practical lights only — warm candle glow from the table. Shallow depth of field.' },
-    { agent: 'editor', text: 'Dialogue-driven. Standard coverage — wide, two mediums, two close-ups. Keep rhythm tight on the banter.' },
-    { agent: 'productionDesigner', text: 'Jazz bar interior: dark wood, brass fixtures, red leather booths. Saxophone player staged in soft backlight.' },
-  ],
-  'scene-3': [
-    { agent: 'director', text: 'Transition scene — 2 shots. Tracking Cole through alleys, then static in the car.' },
-    { agent: 'cinematographer', text: 'Tracking at 28mm handheld for gritty energy. Car interior at 50mm, dashboard-mounted.' },
-    { agent: 'editor', text: 'Quick scene — keeps momentum. Alley tracking can be one continuous take.', approved: true },
-    { agent: 'productionDesigner', text: 'Alley: wet brick, single floodlight, steam. Car: dark interior, blue camera screen glow.', approved: true },
-  ],
-  'scene-4': [
-    { agent: 'director', text: 'Dawn light is the character here. Marcus is small against the industrial landscape. One wide, one medium.' },
-    { agent: 'cinematographer', text: 'Magic hour shoot. 24mm wide for scale. Let natural light do the heavy lifting — golden backlight.' },
-    { agent: 'editor', text: 'Contemplative beat. Hold on the wide for 8+ seconds before cutting to medium.' },
-    { agent: 'productionDesigner', text: 'Cargo containers as monoliths. Rust, peeling paint. Seagulls for ambient sound design.' },
-  ],
-  'scene-5': [
-    { agent: 'director', text: 'Office politics scene. Reyes is authority — she stays standing while Marcus sits. Over-the-shoulder coverage.' },
-    { agent: 'cinematographer', text: 'Fluorescent overhead — unflattering on purpose. 40mm for OTS. Slight low angle on Reyes.' },
-    { agent: 'editor', text: 'Cross-cut tension. Quick cuts between their faces. Build pace toward the reveal.' },
-    { agent: 'productionDesigner', text: 'Precinct clutter: papers, coffee cups, old monitors. Reyes office has awards and a dead plant.' },
-  ],
-  'scene-6': [
-    { agent: 'director', text: 'Power scene — Ashford owns the room. Wide reveal of the penthouse, then tight on the scotch glass. Marcus is framed small.' },
-    { agent: 'cinematographer', text: '16mm wide for the reveal. Rack focus from skyline to Ashford. City lights as practical bokeh.' },
-    { agent: 'editor', text: 'Slow reveal. Hold the wide, then cut to Ashford on his first line. Standard shot/reverse for dialogue.' },
-    { agent: 'productionDesigner', text: 'Minimalist penthouse: marble, glass, single sculpture. City view is the set piece. Cool blue palette.' },
-  ],
-  'scene-7': [
-    { agent: 'director', text: 'Isolation shot. Marcus alone with the city. Wide and still — let the wind carry the emotion.' },
-    { agent: 'cinematographer', text: 'Drone wide pulling back to reveal the cityscape. 14mm for environmental depth. Wind-noise on audio.' },
-    { agent: 'editor', text: 'One shot, one take if possible. No cuts needed. This is the visual thesis of loneliness.' },
-    { agent: 'productionDesigner', text: 'Rooftop: water tower, antenna, gravel floor. City lights in every direction — warm amber below, cold sky above.' },
-  ],
-  'scene-8': [
-    { agent: 'director', text: 'Closing mirror to Scene 2. Same bar, now empty. Elara alone — melancholy. End on a sustained wide.' },
-    { agent: 'cinematographer', text: 'Same lens as Scene 2 (85mm) but now the bar is empty and cold. Single practical light on the piano.' },
-    { agent: 'editor', text: 'Final scene — let it breathe. Piano note is the metronome. Fade to black on her last line.' },
-    { agent: 'productionDesigner', text: 'Chairs stacked. House lights off. Single pool of light. Dust motes in the beam.' },
-  ],
-};
 
 /* ── Agent display config ── */
 const AGENT_CONFIG: { key: AgentRole; label: string; icon: string; color: string }[] = [
@@ -78,6 +22,25 @@ const AGENT_CONFIG: { key: AgentRole; label: string; icon: string; color: string
   { key: 'editor', label: 'Editor', icon: '✂', color: agentColors.editor },
   { key: 'productionDesigner', label: 'Production Designer', icon: '🏗', color: agentColors.productionDesigner },
 ];
+
+/** Map backend agent names to frontend AgentRole */
+function toAgentRole(agent: string): AgentRole | null {
+  const map: Record<string, AgentRole> = {
+    Director: 'director',
+    Cinematographer: 'cinematographer',
+    Editor: 'editor',
+    ProductionDesigner: 'productionDesigner',
+  };
+  return map[agent] || null;
+}
+
+interface DebateMessage {
+  id: string;
+  agent: AgentRole;
+  text: string;
+  sceneIndex: number;
+  streaming?: boolean;
+}
 
 const ShotGeneration: React.FC = () => {
   const { completeStep } = useNavigationStore();
@@ -88,45 +51,191 @@ const ShotGeneration: React.FC = () => {
     completedScenes,
     setCurrentScene,
     completeScene,
+    isDebating,
+    setIsDebating,
+    isComplete,
+    setComplete,
   } = useShotStore();
+  const { setFrames } = useStoryboardStore();
+  const { storyboardId } = useStoryStore();
 
   const [selectedAgent, setSelectedAgent] = useState<AgentRole | null>(null);
-  const [noteInput, setNoteInput] = useState('');
-  const [userNotes, setUserNotes] = useState<Record<string, string[]>>({});
+  const [debateMessages, setDebateMessages] = useState<DebateMessage[]>([]);
+  const [sceneParams, setSceneParams] = useState<Record<number, Record<string, unknown>>>({});
+  const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const msgIdRef = useRef(0);
 
-  // Use mock scenes if store is empty
   const sceneList = scenes.length > 0 ? scenes : [];
   const activeScene = sceneList[currentSceneIndex];
-  const sceneId = activeScene?.id || `scene-${currentSceneIndex + 1}`;
-  const notes = CREW_NOTES[sceneId] || CREW_NOTES['scene-1'] || [];
+  const totalScenes = sceneList.length;
 
-  // Auto-complete scenes up to current
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    for (let i = 0; i < currentSceneIndex; i++) {
-      if (!completedScenes.includes(i)) completeScene(i);
+    if (contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
-  }, [currentSceneIndex]);
+  }, [debateMessages]);
+
+  // Messages for the current scene, optionally filtered by agent
+  const visibleMessages = debateMessages
+    .filter((m) => m.sceneIndex === currentSceneIndex)
+    .filter((m) => !selectedAgent || m.agent === selectedAgent);
+
+  /** Start the SSE debate stream */
+  const startDebate = useCallback(async () => {
+    if (sceneList.length === 0) return;
+    setIsDebating(true);
+    setError(null);
+    setDebateMessages([]);
+    setSceneParams({});
+    msgIdRef.current = 0;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Convert frontend scenes → backend SceneContext[]
+    const backendScenes = sceneList.map((s) => ({
+      slug: s.slugLine,
+      body: s.body || s.blocks.map((b) =>
+        b.type === 'action' ? b.text : `${b.dialogue?.character}\n${b.dialogue?.parenthetical ? `(${b.dialogue.parenthetical})\n` : ''}${b.dialogue?.line}`
+      ).join('\n\n'),
+      characters: s.characters,
+      location: s.location,
+      timeOfDay: s.timeOfDay,
+    }));
+
+    try {
+      const res = await fetch(`${API_BASE}/api/debate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenes: backendScenes, storyboardId }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error(`Debate failed: HTTP ${res.status}`);
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      // Track the last agent message per agent to append streaming chunks
+      const activeAgentMsg: Record<string, string> = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event: Record<string, unknown>;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+          switch (event.type) {
+            case 'scene_start': {
+              const idx = event.scene_index as number;
+              setCurrentScene(idx);
+              break;
+            }
+            case 'debate_chunk': {
+              const role = toAgentRole(event.agent as string);
+              if (!role) break;
+              const chunk = event.chunk as string;
+              const isDone = event.done as boolean;
+              const agentKey = `${role}-${currentSceneIndex}`;
+
+              if (activeAgentMsg[agentKey] !== undefined) {
+                // Append to existing streaming message
+                activeAgentMsg[agentKey] += chunk;
+                const currentText = activeAgentMsg[agentKey];
+                setDebateMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIdx = updated.findLastIndex(
+                    (m) => m.agent === role && m.streaming
+                  );
+                  if (lastIdx >= 0) {
+                    updated[lastIdx] = { ...updated[lastIdx], text: currentText, streaming: !isDone };
+                  }
+                  return updated;
+                });
+              } else {
+                // Start new message for this agent
+                activeAgentMsg[agentKey] = chunk;
+                const id = `msg-${++msgIdRef.current}`;
+                setDebateMessages((prev) => [
+                  ...prev,
+                  { id, agent: role, text: chunk, sceneIndex: currentSceneIndex, streaming: !isDone },
+                ]);
+              }
+
+              if (isDone) {
+                delete activeAgentMsg[agentKey];
+              }
+              break;
+            }
+            case 'scene_complete': {
+              const idx = event.scene_index as number;
+              completeScene(idx);
+              if (event.shot_parameters) {
+                setSceneParams((prev) => ({ ...prev, [idx]: event.shot_parameters as Record<string, unknown> }));
+              }
+              break;
+            }
+            case 'done': {
+              setComplete();
+              // Build frames from scene params for Storyboard page
+              const frames: Frame[] = [];
+              Object.entries(sceneParams).forEach(([sceneIdx, params]) => {
+                const sIdx = Number(sceneIdx);
+                const scene = sceneList[sIdx];
+                if (!scene) return;
+                frames.push({
+                  id: `frame-${sIdx + 1}`,
+                  sceneId: scene.id,
+                  sceneNumber: scene.number,
+                  frameNumber: sIdx + 1,
+                  title: scene.slugLine,
+                  description: scene.body || '',
+                  characters: scene.characters,
+                  duration: '—',
+                  instantParams: { colorTemperature: 5600, contrast: 50, haze: 0, colorGrade: 'Neutral' },
+                  deepParams: {
+                    focalLength: 35, cameraAngle: 'Eye Level', dutchAngle: 0,
+                    cameraHeight: 'Standard', shotSize: 'Wide', compGrid: 'Rule of Thirds',
+                    eyeline: 'Direct to Camera', headroom: 'Standard', keyLightDir: 'Side 45°',
+                    lightQuality: 'Medium-Soft', era: 'Contemporary', setCondition: 'Clean',
+                    movement: 'Static', aspectRatio: '2.39:1',
+                  },
+                });
+              });
+              if (frames.length > 0) setFrames(frames);
+              break;
+            }
+            case 'error': {
+              setError(event.message as string || 'Debate error');
+              break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Debate stream failed');
+      }
+    } finally {
+      setIsDebating(false);
+      abortRef.current = null;
+    }
+  }, [sceneList, currentSceneIndex]);
 
   const handleSceneClick = (idx: number) => {
     setCurrentScene(idx);
     setSelectedAgent(null);
   };
-
-  const handleNoteSubmit = () => {
-    if (!noteInput.trim()) return;
-    setUserNotes((prev) => ({
-      ...prev,
-      [sceneId]: [...(prev[sceneId] || []), noteInput.trim()],
-    }));
-    setNoteInput('');
-  };
-
-  const filteredNotes = selectedAgent
-    ? notes.filter((n) => n.agent === selectedAgent)
-    : notes;
-
-  const totalScenes = sceneList.length || 8;
 
   // ── Styles ──
   const page: React.CSSProperties = {
@@ -414,15 +523,35 @@ const ShotGeneration: React.FC = () => {
             </h2>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span
-                style={{
-                  fontSize: 12,
-                  color: '#8A7E72',
-                  fontWeight: 500,
-                }}
-              >
-                Scene Index
-              </span>
+              {!isDebating && !isComplete && (
+                <button
+                  onClick={startDebate}
+                  disabled={sceneList.length === 0}
+                  style={{
+                    padding: '8px 20px',
+                    backgroundColor: '#C4724B',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: sceneList.length === 0 ? 'not-allowed' : 'pointer',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                    opacity: sceneList.length === 0 ? 0.5 : 1,
+                  }}
+                >
+                  Begin Crew Debate
+                </button>
+              )}
+              {isDebating && (
+                <span style={{ fontSize: 12, color: '#C4724B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#C4724B', animation: 'pulse 1s infinite' }} />
+                  Debating…
+                </span>
+              )}
+              {isComplete && (
+                <span style={{ fontSize: 12, color: '#7A8B6F', fontWeight: 600 }}>✓ Complete</span>
+              )}
               <span
                 style={{
                   fontSize: 11,
@@ -439,7 +568,14 @@ const ShotGeneration: React.FC = () => {
             </div>
           </div>
 
-          {/* Crew notes */}
+          {/* Error */}
+          {error && (
+            <div style={{ padding: '12px 28px', color: '#D04040', fontSize: 13, background: 'rgba(208,64,64,0.06)', borderBottom: '1px solid rgba(208,64,64,0.15)' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Debate messages */}
           <div
             ref={contentRef}
             style={{
@@ -448,11 +584,24 @@ const ShotGeneration: React.FC = () => {
               padding: '24px 28px',
             }}
           >
-            {filteredNotes.map((note, idx) => {
-              const agentCfg = AGENT_CONFIG.find((a) => a.key === note.agent);
+            {visibleMessages.length === 0 && !isDebating && (
+              <div style={{ textAlign: 'center', padding: '80px 0', color: '#8A7E72' }}>
+                <p style={{ fontSize: 15, fontStyle: 'italic', fontFamily: '"Playfair Display", Georgia, serif' }}>
+                  {sceneList.length === 0
+                    ? 'No scenes loaded. Go back and generate a screenplay first.'
+                    : 'Press "Begin Crew Debate" to start the shot design process.'}
+                </p>
+                <p style={{ fontSize: 12, marginTop: 8 }}>
+                  4 agents will analyse each scene and debate shot parameters.
+                </p>
+              </div>
+            )}
+
+            {visibleMessages.map((msg) => {
+              const agentCfg = AGENT_CONFIG.find((a) => a.key === msg.agent);
               return (
                 <div
-                  key={`${note.agent}-${idx}`}
+                  key={msg.id}
                   style={{
                     marginBottom: 28,
                   }}
@@ -484,14 +633,14 @@ const ShotGeneration: React.FC = () => {
                         textTransform: 'uppercase',
                       }}
                     >
-                      {agentCfg?.label || note.agent}
-                      {note.approved && (
-                        <span style={{ marginLeft: 6, fontSize: 12 }}>✓</span>
+                      {agentCfg?.icon} {agentCfg?.label || msg.agent}
+                      {msg.streaming && (
+                        <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.7 }}>streaming…</span>
                       )}
                     </span>
                   </div>
 
-                  {/* Note text */}
+                  {/* Message text */}
                   <p
                     style={{
                       fontSize: 14,
@@ -500,53 +649,25 @@ const ShotGeneration: React.FC = () => {
                       margin: 0,
                       paddingLeft: 16,
                       fontFamily: '"Inter", system-ui, sans-serif',
+                      whiteSpace: 'pre-wrap',
                     }}
                   >
-                    {note.text}
-                    {note.approved && (
-                      <span style={{ marginLeft: 6, color: '#8A7E72', fontSize: 13 }}>✓</span>
+                    {msg.text}
+                    {msg.streaming && (
+                      <span style={{ display: 'inline-block', width: 2, height: '1em', marginLeft: 2, background: agentCfg?.color || '#999', animation: 'blink 0.8s step-end infinite', verticalAlign: 'text-bottom' }} />
                     )}
                   </p>
                 </div>
               );
             })}
-
-            {/* User production notes for this scene */}
-            {(userNotes[sceneId] || []).map((n, i) => (
-              <div
-                key={`user-${i}`}
-                style={{
-                  marginBottom: 20,
-                  paddingLeft: 16,
-                  borderLeft: '3px solid #D8CCBA',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.1em',
-                    color: '#8A7E72',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  YOUR NOTE
-                </span>
-                <p
-                  style={{
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    color: '#2C2C2C',
-                    margin: '4px 0 0',
-                  }}
-                >
-                  {n}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes blink { 50% { opacity: 0; } }
+      `}</style>
     </div>
   );
 };

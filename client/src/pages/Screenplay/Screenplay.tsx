@@ -2,9 +2,49 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useScreenplayStore } from '../../stores/screenplayStore';
+import { useStoryStore } from '../../stores/storyStore';
+import { useCastStore } from '../../stores/castStore';
 import { useNavigationStore } from '../../stores/navigationStore';
-import { mockScenes } from '../../data/mockScreenplay';
-import type { SceneBlock } from '../../types';
+import type { Scene, SceneBlock, Character } from '../../types';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+/** Convert a raw screenplay body string into typed SceneBlocks. */
+function parseBodyToBlocks(body: string): SceneBlock[] {
+  if (!body?.trim()) return [];
+  const blocks: SceneBlock[] = [];
+  const lines = body.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; continue; }
+    const capsMatch = line.match(/^([A-Z][A-Z\s.'\-()]+)$/);
+    if (capsMatch) {
+      const character = capsMatch[1].trim();
+      i++;
+      let parenthetical: string | undefined;
+      while (i < lines.length && !lines[i].trim()) i++;
+      if (i < lines.length && lines[i].trim().startsWith('(')) {
+        parenthetical = lines[i].trim().replace(/^\(|\)$/g, '');
+        i++;
+      }
+      const dialogueLines: string[] = [];
+      while (i < lines.length && lines[i].trim()) {
+        dialogueLines.push(lines[i].trim());
+        i++;
+      }
+      if (dialogueLines.length > 0) {
+        blocks.push({ type: 'dialogue', dialogue: { character, parenthetical, line: dialogueLines.join(' ') } });
+      } else {
+        blocks.push({ type: 'action', text: line });
+      }
+    } else {
+      blocks.push({ type: 'action', text: line });
+      i++;
+    }
+  }
+  return blocks;
+}
 
 /**
  * Page 2 — Screenplay Review
@@ -15,13 +55,62 @@ const Screenplay = () => {
   const { completeStep } = useNavigationStore();
   useEffect(() => { completeStep(1); }, []);
   const { scenes, setScenes, deleteScene, setEditingScene, editingSceneId, reorderScenes } = useScreenplayStore();
+  const { storyText, setStoryboardId } = useStoryStore();
+  const { setCharacters } = useCastStore();
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const dragNode = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (scenes.length === 0) setScenes(mockScenes);
+    if (scenes.length === 0) navigate('/');
   }, []);
+
+  const handleRegenerate = async () => {
+    if (!storyText.trim() || isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/generate-and-parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: storyText.trim() }),
+      });
+      if (!res.ok) throw new Error('Regeneration failed');
+      const data = await res.json();
+      if (data.storyboardId) setStoryboardId(data.storyboardId);
+      const newScenes: Scene[] = (data.scenes || []).map((sc: { slug: string; body: string; characters: string[]; location: string; timeOfDay: string }, idx: number) => ({
+        id: `scene-${idx + 1}`,
+        number: idx + 1,
+        slugLine: sc.slug,
+        body: sc.body,
+        blocks: parseBodyToBlocks(sc.body),
+        characters: sc.characters,
+        location: sc.location,
+        timeOfDay: sc.timeOfDay,
+      }));
+      setScenes(newScenes);
+      // Update cast
+      const allNames = new Set<string>();
+      for (const sc of newScenes) {
+        for (const c of sc.characters) if (c?.trim()) allNames.add(c.trim());
+      }
+      const colorPool = ['#C4724B', '#6B8CA6', '#C4A04B', '#7A8B6F'];
+      const characters: Character[] = Array.from(allNames).map((name, i) => ({
+        id: `char-${i + 1}`,
+        name,
+        age: 'Unknown',
+        description: 'Character from the screenplay',
+        visualTraits: [],
+        color: colorPool[i % colorPool.length],
+        isLocked: false,
+      }));
+      setCharacters(characters);
+    } catch (err) {
+      console.error('Regeneration error:', err);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, idx: number) => {
     setDragIdx(idx);
@@ -393,8 +482,8 @@ const Screenplay = () => {
               {scenes.length} scenes · Drag to reorder · Click Edit to rewrite
             </p>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button style={regenerateBtn}>
-                <span style={{ fontSize: '14px' }}>↻</span> Regenerate
+              <button style={regenerateBtn} onClick={handleRegenerate} disabled={isRegenerating}>
+                <span style={{ fontSize: '14px' }}>↻</span> {isRegenerating ? 'Regenerating…' : 'Regenerate'}
               </button>
               <button style={approveBtn} onClick={() => navigate('/cast')}>
                 Approve Script →

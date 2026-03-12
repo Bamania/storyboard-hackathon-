@@ -1,12 +1,54 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useStoryStore } from '../../stores/storyStore';
 import { useScreenplayStore } from '../../stores/screenplayStore';
+import { useCastStore } from '../../stores/castStore';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { agents } from '../../theme/tokens';
-import { mockScenes } from '../../data/mockScreenplay';
+import type { Scene, SceneBlock, Character } from '../../types';
 
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+/** Convert a raw screenplay body string into typed SceneBlocks. */
+function parseBodyToBlocks(body: string): SceneBlock[] {
+  if (!body?.trim()) return [];
+  const blocks: SceneBlock[] = [];
+  const lines = body.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; continue; }
+    // Detect dialogue: character name is ALL CAPS, next non-empty line is the spoken line
+    const capsMatch = line.match(/^([A-Z][A-Z\s.'\-()]+)$/);
+    if (capsMatch) {
+      const character = capsMatch[1].trim();
+      i++;
+      let parenthetical: string | undefined;
+      // Check for parenthetical
+      while (i < lines.length && !lines[i].trim()) i++;
+      if (i < lines.length && lines[i].trim().startsWith('(')) {
+        parenthetical = lines[i].trim().replace(/^\(|\)$/g, '');
+        i++;
+      }
+      // Gather the dialogue line(s)
+      const dialogueLines: string[] = [];
+      while (i < lines.length && lines[i].trim()) {
+        dialogueLines.push(lines[i].trim());
+        i++;
+      }
+      if (dialogueLines.length > 0) {
+        blocks.push({ type: 'dialogue', dialogue: { character, parenthetical, line: dialogueLines.join(' ') } });
+      } else {
+        blocks.push({ type: 'action', text: line });
+      }
+    } else {
+      blocks.push({ type: 'action', text: line });
+      i++;
+    }
+  }
+  return blocks;
+}
 
 /**
  * Page 1 — Story Input
@@ -14,19 +56,67 @@ import { mockScenes } from '../../data/mockScreenplay';
  */
 const StoryInput = () => {
   const navigate = useNavigate();
-  const { storyText, isGenerating, setStoryText, startGenerating } = useStoryStore();
+  const { storyText, isGenerating, setStoryText, setStoryboardId, startGenerating, stopGenerating } = useStoryStore();
   const { setScenes } = useScreenplayStore();
+  const { setCharacters } = useCastStore();
   const { setCurrentStep, completeStep } = useNavigationStore();
+  const [error, setError] = useState<string | null>(null);
 
-  const handleGenerate = () => {
-    if (!storyText.trim()) return;
+  const handleGenerate = async () => {
+    if (!storyText.trim() || isGenerating) return;
+    setError(null);
     startGenerating();
-    setTimeout(() => {
-      setScenes(mockScenes);
+    try {
+      const res = await fetch(`${API_BASE}/api/generate-and-parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: storyText.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Server error' }));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      // Store storyboard DB ID
+      if (data.storyboardId) setStoryboardId(data.storyboardId);
+      // Transform backend SceneContext[] → frontend Scene[]
+      const scenes: Scene[] = (data.scenes || []).map((sc: { slug: string; body: string; characters: string[]; location: string; timeOfDay: string }, idx: number) => ({
+        id: `scene-${idx + 1}`,
+        number: idx + 1,
+        slugLine: sc.slug,
+        body: sc.body,
+        blocks: parseBodyToBlocks(sc.body),
+        characters: sc.characters,
+        location: sc.location,
+        timeOfDay: sc.timeOfDay,
+      }));
+      setScenes(scenes);
+
+      // Derive cast from all unique character names
+      const allNames = new Set<string>();
+      for (const sc of scenes) {
+        for (const c of sc.characters) if (c?.trim()) allNames.add(c.trim());
+      }
+      const colorPool = ['#C4724B', '#6B8CA6', '#C4A04B', '#7A8B6F'];
+      const characters: Character[] = Array.from(allNames).map((name, i) => ({
+        id: `char-${i + 1}`,
+        name,
+        age: 'Unknown',
+        description: `Character from the screenplay`,
+        visualTraits: [],
+        color: colorPool[i % colorPool.length],
+        isLocked: false,
+      }));
+      setCharacters(characters);
+
       completeStep(1);
       setCurrentStep(2);
       navigate('/screenplay');
-    }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate screenplay');
+    } finally {
+      stopGenerating();
+    }
   };
 
   const crewBadges = [
@@ -366,6 +456,13 @@ const StoryInput = () => {
 
         {/* Standby text */}
         <p style={standbyText}>Your crew is standing by</p>
+
+        {/* Error message */}
+        {error && (
+          <p style={{ color: '#D04040', fontSize: '13px', marginBottom: '12px', textAlign: 'center', fontFamily: '"Inter", system-ui, sans-serif' }}>
+            {error}
+          </p>
+        )}
 
         {/* Generate button */}
         {isGenerating ? (
