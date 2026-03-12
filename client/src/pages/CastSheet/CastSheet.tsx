@@ -2,18 +2,11 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useCastStore } from '../../stores/castStore';
+import { useNavigationStore } from '../../stores/navigationStore';
 import { mockCharacters, getCrewFeedback, getVariants } from '../../data/mockCast';
 import type { CrewFeedback, Variant } from '../../data/mockCast';
 import { agents } from '../../theme/tokens';
 
-/**
- * Page 3 — Cast Sheet  (3D Cylindrical Carousel Edition)
- *
- * Characters are displayed in a 3D coverflow carousel.
- * The active (front-facing) card's full details are shown in
- * a detail panel below. All regeneration, locking, and editing
- * happens in that panel.
- */
 
 type CharPhase = 'idle' | 'regenerating' | 'feedback' | 'variants';
 
@@ -42,6 +35,8 @@ const BASE_Z = 80;     // translateZ for the front card
 
 const CastSheet: React.FC = () => {
   const navigate = useNavigate();
+  const { completeStep } = useNavigationStore();
+  useEffect(() => { completeStep(2); }, []);
   const {
     characters,
     setCharacters,
@@ -284,7 +279,10 @@ const CastSheet: React.FC = () => {
       style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(180deg, #D8C4A8 0%, #D2BB9C 30%, #CBAF8E 60%, #C4A67E 100%)',
+        backgroundImage: 'url(/images/background.avif)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
         fontFamily: '"Inter", system-ui, sans-serif',
         overflowX: 'hidden',
       }}
@@ -348,14 +346,16 @@ const CastSheet: React.FC = () => {
         {/* ═══ Header ═══ */}
         <div
           style={{
-            background: 'rgba(255,255,255,0.35)',
+            background: 'rgba(255,255,255,0.12)',
             borderRadius: 16,
             padding: '28px 32px',
             marginBottom: 24,
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
-            backdropFilter: 'blur(8px)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.25)',
           }}
         >
           <div>
@@ -404,11 +404,12 @@ const CastSheet: React.FC = () => {
             alignItems: 'flex-start',
             gap: 14,
             padding: '20px 24px',
-            backgroundColor: 'rgba(255,255,255,0.6)',
+            backgroundColor: 'rgba(255,255,255,0.15)',
             borderRadius: 14,
             borderLeft: '4px solid #C4724B',
             marginBottom: 36,
-            backdropFilter: 'blur(6px)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
           }}
         >
           <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>🎬</span>
@@ -483,8 +484,9 @@ const CastSheet: React.FC = () => {
                     height: 46,
                     borderRadius: '50%',
                     border: 'none',
-                    background: 'rgba(255,255,255,0.65)',
-                    backdropFilter: 'blur(10px)',
+                    background: 'rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -543,8 +545,10 @@ const CastSheet: React.FC = () => {
                         ...cardTransform,
                         /* Card surface */
                         background: char.isLocked
-                          ? 'linear-gradient(145deg, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.88) 100%)'
-                          : 'linear-gradient(145deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.78) 100%)',
+                          ? 'linear-gradient(145deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)'
+                          : 'linear-gradient(145deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.10) 100%)',
+                        backdropFilter: 'blur(24px)',
+                        WebkitBackdropFilter: 'blur(24px)',
                         border: char.isLocked
                           ? `2.5px solid ${char.color}`
                           : '1.5px solid rgba(255,255,255,0.65)',
@@ -769,8 +773,9 @@ const CastSheet: React.FC = () => {
                     height: 46,
                     borderRadius: '50%',
                     border: 'none',
-                    background: 'rgba(255,255,255,0.65)',
-                    backdropFilter: 'blur(10px)',
+                    background: 'rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',

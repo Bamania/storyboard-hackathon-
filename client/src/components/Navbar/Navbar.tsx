@@ -1,4 +1,6 @@
 import React from 'react';
+import { useNavigationStore } from '../../stores/navigationStore';
+import type { AppStep } from '../../types';
 
 interface NavbarProps {
   /** If provided, renders the horizontal stepper navbar instead of landing nav links */
@@ -6,10 +8,10 @@ interface NavbarProps {
 }
 
 const STEPS = [
-  { num: 1, label: 'SCRIPT' },
-  { num: 2, label: 'CAST' },
-  { num: 3, label: 'SHOTS' },
-  { num: 4, label: 'EXPORT' },
+  { num: 1, label: 'SCRIPT', path: '/screenplay' },
+  { num: 2, label: 'CAST', path: '/cast' },
+  { num: 3, label: 'SHOTS', path: '/shots' },
+  { num: 4, label: 'EDITOR', path: '/storyboard' },
 ];
 
 /**
@@ -18,6 +20,7 @@ const STEPS = [
  * Workflow pages: logo + horizontal step progress + settings + avatar
  */
 const Navbar: React.FC<NavbarProps> = ({ step }) => {
+  const { completedSteps } = useNavigationStore();
   const nav: React.CSSProperties = {
     position: 'fixed',
     top: '12px',
@@ -29,12 +32,12 @@ const Navbar: React.FC<NavbarProps> = ({ step }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'transparent',
-    backdropFilter: 'blur(10px) saturate(10%)',
-    WebkitBackdropFilter: 'blur(10px) saturate(10%)',
-    border: '1px solid rgba(255, 255, 255, 0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
     borderRadius: '16px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255,255,255,0.4)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.05)',
     fontFamily: '"Inter", system-ui, sans-serif',
   };
 
@@ -82,8 +85,7 @@ const Navbar: React.FC<NavbarProps> = ({ step }) => {
 
   const circleBase = (s: number): React.CSSProperties => {
     const isActive = s === step;
-    const isCompleted = s < step;
-    const isFuture = s > step;
+    const isCompleted = completedSteps.includes(s as AppStep);
     return {
       width: '28px',
       height: '28px',
@@ -102,7 +104,7 @@ const Navbar: React.FC<NavbarProps> = ({ step }) => {
 
   const stepLabel = (s: number): React.CSSProperties => {
     const isActive = s === step;
-    const isCompleted = s < step;
+    const isCompleted = completedSteps.includes(s as AppStep);
     return {
       fontSize: '11px',
       fontWeight: isActive ? 700 : 600,
@@ -113,12 +115,15 @@ const Navbar: React.FC<NavbarProps> = ({ step }) => {
     };
   };
 
-  const connector: React.CSSProperties = {
-    width: '40px',
-    height: '2px',
-    backgroundColor: '#D8CDBE',
-    margin: '0 8px',
-    flexShrink: 0,
+  const connector = (leftStep: number, rightStep: number): React.CSSProperties => {
+    const bothDone = completedSteps.includes(leftStep as AppStep) && completedSteps.includes(rightStep as AppStep);
+    return {
+      width: '40px',
+      height: '2px',
+      backgroundColor: bothDone ? '#7A8B6F' : '#D8CDBE',
+      margin: '0 8px',
+      flexShrink: 0,
+    };
   };
 
   const rightSection: React.CSSProperties = {
@@ -162,11 +167,22 @@ const Navbar: React.FC<NavbarProps> = ({ step }) => {
       <div style={stepperWrap}>
         {STEPS.map((s, i) => (
           <React.Fragment key={s.num}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={circleBase(s.num)}>{s.num}</div>
+            <div
+              style={{ display: 'flex', alignItems: 'center' }}
+              title={s.label}
+            >
+              <div style={circleBase(s.num)}>
+                {completedSteps.includes(s.num as AppStep) && s.num !== step ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  s.num
+                )}
+              </div>
               <span style={stepLabel(s.num)}>{s.label}</span>
             </div>
-            {i < STEPS.length - 1 && <div style={connector} />}
+            {i < STEPS.length - 1 && <div style={connector(s.num, STEPS[i + 1].num)} />}
           </React.Fragment>
         ))}
       </div>

@@ -65,11 +65,13 @@ const StoryInput = () => {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FDF5EB',
+    background: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '9999px',
     padding: '6px 20px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-    border: '1px solid #EDE5D8',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+    border: '1px solid rgba(255,255,255,0.2)',
     marginBottom: '16px',
   };
 
@@ -105,8 +107,10 @@ const StoryInput = () => {
     width: '100%',
     maxWidth: '640px',
     height: '140px',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #F0EBE1',
+    background: 'rgba(255,255,255,0.2)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.2)',
     borderRadius: '20px',
     padding: '24px',
     fontSize: '15px',
@@ -114,7 +118,7 @@ const StoryInput = () => {
     fontFamily: '"Inter", system-ui, sans-serif',
     resize: 'none' as const,
     outline: 'none',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.05)',
     marginBottom: '20px',
   };
 
@@ -131,11 +135,13 @@ const StoryInput = () => {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: '#FFFFFF',
+    background: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '9999px',
     padding: '8px 18px',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    border: '1px solid #F0EBE1',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+    border: '1px solid rgba(255,255,255,0.2)',
   };
 
   const crewDot = (color: string): React.CSSProperties => ({
@@ -224,7 +230,9 @@ const StoryInput = () => {
   const card: React.CSSProperties = {
     flex: '1 1 200px',
     maxWidth: '230px',
-    backgroundColor: '#FFFFFF',
+    background: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '20px',
     padding: '28px 20px',
     display: 'flex',
@@ -232,8 +240,8 @@ const StoryInput = () => {
     alignItems: 'center',
     justifyContent: 'center',
     textAlign: 'center',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-    border: '1px solid #F0EBE1',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(255,255,255,0.2)',
   };
 
   const cardTitle: React.CSSProperties = {
@@ -324,6 +332,12 @@ const StoryInput = () => {
         <textarea
           value={storyText}
           onChange={(e) => setStoryText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleGenerate();
+            }
+          }}
           placeholder="A noir detective story set in a rain-soaked city at night..."
           disabled={isGenerating}
           style={textareaStyle}

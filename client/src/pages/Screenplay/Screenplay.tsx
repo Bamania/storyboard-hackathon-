@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useScreenplayStore } from '../../stores/screenplayStore';
+import { useNavigationStore } from '../../stores/navigationStore';
 import { mockScenes } from '../../data/mockScreenplay';
 import type { SceneBlock } from '../../types';
 
@@ -11,6 +12,8 @@ import type { SceneBlock } from '../../types';
  */
 const Screenplay = () => {
   const navigate = useNavigate();
+  const { completeStep } = useNavigationStore();
+  useEffect(() => { completeStep(1); }, []);
   const { scenes, setScenes, deleteScene, setEditingScene, editingSceneId, reorderScenes } = useScreenplayStore();
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
@@ -57,7 +60,10 @@ const Screenplay = () => {
   const page: React.CSSProperties = {
     minHeight: '100vh',
     width: '100%',
-    background: 'linear-gradient(180deg, #CCAE8E 0%, #D2BB9C 30%, #D8BD9A 60%, #B9916A 100%)',
+    backgroundImage: 'url(/images/background.avif)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
     fontFamily: '"Inter", system-ui, sans-serif',
   };
 
@@ -94,8 +100,10 @@ const Screenplay = () => {
     alignItems: 'center',
     gap: '5px',
     padding: '7px 16px',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #D8CCBA',
+    background: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.2)',
     borderRadius: '8px',
     fontSize: '13px',
     fontWeight: 600,
@@ -119,19 +127,25 @@ const Screenplay = () => {
   };
 
   const headerCard: React.CSSProperties = {
-    backgroundColor: '#E2CFBD',
+    background: 'rgba(255,255,255,0.18)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.2)',
     borderRadius: '14px',
     padding: '20px 24px',
     marginBottom: '28px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
   };
 
   const sceneCard: React.CSSProperties = {
-    backgroundColor: '#E5D3C0',
+    background: 'rgba(255,255,255,0.2)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '16px',
-    border: '1px solid #E0D5C3',
+    border: '1px solid rgba(255,255,255,0.2)',
     padding: '36px 40px',
     marginBottom: '24px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.05)',
     transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 
@@ -200,12 +214,14 @@ const Screenplay = () => {
   };
 
   const editingCard: React.CSSProperties = {
-    backgroundColor: '#F0E6D4',
+    background: 'rgba(255,255,255,0.2)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '16px',
     border: '2px dashed #C4724B',
     padding: '36px 40px',
     marginBottom: '24px',
-    boxShadow: '0 2px 12px rgba(196, 114, 75, 0.10)',
+    boxShadow: '0 8px 32px rgba(196, 114, 75, 0.05)',
     transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 
@@ -327,9 +343,11 @@ const Screenplay = () => {
     width: '48px',
     height: '48px',
     borderRadius: '50%',
-    backgroundColor: '#FFFFFF',
-    border: 'none',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+    background: 'rgba(255,255,255,0.2)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.06)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
