@@ -3,9 +3,10 @@ import { InMemoryRunner, StreamingMode } from '@google/adk';
 import type { RunConfig } from '@google/adk';
 import { createUserContent } from '@google/genai';
 import { startDebate, completeStoryboard, createArtboard } from '../db/index.js';
-import { sceneOrchestrator } from '../crew_debate/scene_orchestrator.js';
 import { parseScriptToScenes } from '../pipeline/script_parser.js';
 import type { SceneContext } from '../crew_debate/types.js';
+// import { rootAgent } from '../crew_debate/manager.js';
+import { debateRootAgent } from '../crew_debate/scene_orchestrator.js';
 
 export const debateRouter = Router();
 
@@ -45,7 +46,7 @@ debateRouter.post('/', async (req, res) => {
 
   try {
     const runner = new InMemoryRunner({
-      agent: sceneOrchestrator,
+      agent: debateRootAgent,
       appName: APP_NAME,
     });
 
@@ -54,38 +55,42 @@ debateRouter.post('/', async (req, res) => {
 
     const initialState = {
       scenes,
-      director_parameters: {
+      director_parameters: JSON.stringify({
         story_beat_action: '',
         emotional_tone: '',
         coverage_pacing: '',
         character_blocking: '',
         dialogue_subtext: '',
         directorial_intent: '',
-      },
-      cinematographer_parameters: {
+        approved: false,
+      }),
+      cinematographer_parameters: JSON.stringify({
         focal_length_mm: '',
         aperture_fstop: '',
         camera_angle_tilt: '',
         lighting_contrast_ratio: '',
         color_temperature_kelvin: '',
         exposure_iso: '',
-      },
-      production_designer_parameters: {
+        approved: false,
+      }),
+      production_designer_parameters: JSON.stringify({
         z_axis_clutter: '',
         volumetrics_atmosphere: '',
         location_set_geometry: '',
         color_palette: '',
         texture_materiality: '',
         practical_lights: '',
-      },
-      editor_parameters: {
+        approved: false,
+      }),
+      editor_parameters: JSON.stringify({
         aspect_ratio: '',
         eye_lines_180_rule: '',
         match_cuts: '',
         character_motion_arrows: '',
         camera_motion_arrows: '',
         duration_timing: '',
-      },
+        approved: false,
+      }),
       current_scene_slug: '',
       current_scene_body: '',
       current_scene_characters: '',
@@ -120,7 +125,7 @@ debateRouter.post('/', async (req, res) => {
     for await (const event of runner.runAsync({
       userId,
       sessionId,
-      newMessage: createUserContent('Begin the crew debate for shot design.'),
+      newMessage: createUserContent('Begin the crew debate for shot design'),
       runConfig,
     })) {
       const parts = event.content?.parts ?? [];

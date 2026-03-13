@@ -20,6 +20,7 @@ export interface DirectorParameters {
   character_blocking: string;
   dialogue_subtext: string;
   directorial_intent: string;
+  approved: boolean;
 }
 
 /** The 6 parameters owned exclusively by the Cinematographer. */
@@ -30,6 +31,7 @@ export interface CinematographerParameters {
   lighting_contrast_ratio: string;
   color_temperature_kelvin: string;
   exposure_iso: string;
+  approved: boolean;
 }
 
 /** The 6 parameters owned exclusively by the Production Designer. */
@@ -40,6 +42,7 @@ export interface ProductionDesignerParameters {
   color_palette: string;
   texture_materiality: string;
   practical_lights: string;
+  approved: boolean;
 }
 
 /** The 6 parameters owned exclusively by the Editor. */
@@ -50,6 +53,7 @@ export interface EditorParameters {
   character_motion_arrows: string;
   camera_motion_arrows: string;
   duration_timing: string;
+  approved: boolean;
 }
 
 /** The complete 24-parameter output for a single scene. */
