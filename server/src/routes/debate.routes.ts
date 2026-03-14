@@ -24,7 +24,6 @@ const TOOL_TO_AGENT: Record<string, string> = {
 function formatParamsForDisplay(args: Record<string, unknown>): string {
   const lines: string[] = [];
   for (const [key, value] of Object.entries(args)) {
-    if (key === 'approved') continue;
     const val = value != null ? String(value) : '';
     if (val) lines.push(`• ${key}: ${val}`);
   }
@@ -121,7 +120,6 @@ debateRouter.post('/', async (req, res) => {
         character_blocking: '',
         dialogue_subtext: '',
         directorial_intent: '',
-        approved: false,
       }),
       cinematographer_parameters: JSON.stringify({
         focal_length_mm: '',
@@ -130,7 +128,6 @@ debateRouter.post('/', async (req, res) => {
         lighting_contrast_ratio: '',
         color_temperature_kelvin: '',
         exposure_iso: '',
-        approved: false,
       }),
       production_designer_parameters: JSON.stringify({
         z_axis_clutter: '',
@@ -139,7 +136,6 @@ debateRouter.post('/', async (req, res) => {
         color_palette: '',
         texture_materiality: '',
         practical_lights: '',
-        approved: false,
       }),
       editor_parameters: JSON.stringify({
         aspect_ratio: '',
@@ -148,7 +144,6 @@ debateRouter.post('/', async (req, res) => {
         character_motion_arrows: '',
         camera_motion_arrows: '',
         duration_timing: '',
-        approved: false,
       }),
       current_scene_slug: '',
       current_scene_body: '',
@@ -159,7 +154,6 @@ debateRouter.post('/', async (req, res) => {
       debate_round: 0,
       last_scene_complete_index: -1,
       last_scene_parameters: null,
-      approved: false,
     };
 
     await runner.sessionService.createSession({
@@ -188,6 +182,24 @@ debateRouter.post('/', async (req, res) => {
       newMessage: createUserContent('Begin the crew debate for shot design'),
       runConfig,
     })) {
+      // Poll session FIRST so debate_chunk gets the correct scene_index
+      const session = await runner.sessionService.getSession({
+        appName: APP_NAME,
+        userId,
+        sessionId,
+      });
+      const currentSceneIndex = (session?.state?.['scene_index'] as number) ?? 0;
+      if (currentSceneIndex > lastSceneIndex) {
+        const scene = scenes[currentSceneIndex];
+        sendEvent({
+          type: 'scene_start',
+          scene_index: currentSceneIndex,
+          scene_slug: scene?.slug,
+          total_scenes: scenes.length,
+        });
+        lastSceneIndex = currentSceneIndex;
+      }
+
       const parts = event.content?.parts ?? [];
       const author = event.author as string;
       const isPartial = (event as { partial?: boolean }).partial ?? false;
@@ -215,30 +227,22 @@ debateRouter.post('/', async (req, res) => {
         }
       }
 
-      // Poll session state after every event to detect scene transitions
-      const session = await runner.sessionService.getSession({
-        appName: APP_NAME,
-        userId,
-        sessionId,
-      });
-
-      const currentSceneIndex = (session?.state?.['scene_index'] as number) ?? 0;
-      if (currentSceneIndex > lastSceneIndex) {
-        const scene = scenes[currentSceneIndex];
-        sendEvent({
-          type: 'scene_start',
-          scene_index: currentSceneIndex,
-          scene_slug: scene?.slug,
-          total_scenes: scenes.length,
-        });
-        lastSceneIndex = currentSceneIndex;
-      }
-
       const lastComplete = (session?.state?.['last_scene_complete_index'] as number) ?? -1;
       if (lastComplete >= 0 && lastComplete > lastEmittedSceneComplete) {
         const sceneParams = session?.state?.['last_scene_parameters'] as Record<string, unknown>;
         sendEvent({ type: 'scene_complete', scene_index: lastComplete, shot_parameters: sceneParams ?? {} });
         lastEmittedSceneComplete = lastComplete;
+        // Advance lastSceneIndex so next debate_chunks get correct scene_index (session poll may not reflect scene transitions during run)
+        lastSceneIndex = lastComplete + 1;
+        if (lastSceneIndex < scenes.length) {
+          const nextScene = scenes[lastSceneIndex];
+          sendEvent({
+            type: 'scene_start',
+            scene_index: lastSceneIndex,
+            scene_slug: nextScene?.slug,
+            total_scenes: scenes.length,
+          });
+        }
 
         // Persist artboard to DB (always — we have effectiveStoryboardId and dbSceneIds)
         const sceneId = dbSceneIds[lastComplete];

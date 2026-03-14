@@ -14,14 +14,12 @@ import {
   updateCinematographerParametersTool,
   updateProductionDesignerParametersTool,
   updateEditorParametersTool,
-  exitLoopTool,
 } from './tools.js';
 import {
   DIRECTOR_INSTRUCTION,
   CINEMATOGRAPHER_INSTRUCTION,
   EDITOR_INSTRUCTION,
   PRODUCTION_DESIGNER_INSTRUCTION,
-  APPROVAL_CHECKER_INSTRUCTION,
 } from './instructions.js';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
@@ -69,15 +67,4 @@ export const productionDesignerAgent = new LlmAgent({
   includeContents: 'none',
   outputKey: 'production_designer_parameters',
 });
-
-export const approvalCheckerAgent = new LlmAgent({
-  name: 'ApprovalChecker',
-  model: GEMINI_MODEL,
-  description:
-    'Checks if all crew approvals are true and triggers ExitLoop when scene is fully approved.',
-  instruction: APPROVAL_CHECKER_INSTRUCTION,
-  tools: [exitLoopTool],
-  includeContents: 'none',
-});
-
 

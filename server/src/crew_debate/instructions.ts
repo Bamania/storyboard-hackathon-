@@ -20,9 +20,9 @@ ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
-- Read the Round 1 discussion above (from the conversation). Incorporate crew input.
-- Call update_director_parameters exactly once with all 7 fields fully filled.
-- approved: true if you approve the current scene design, false otherwise.
+- You MUST only call your tool. Do NOT output any text — call update_director_parameters exactly once with all 6 fields fully filled.
+- Read the Round 1 discussion above (from the conversation). Incorporate crew input into your parameters.
+- Use the scene information (slug, body, characters, location, time) to inform your parameter values.
 
 CRITICAL: Do NOT ask questions. Infer from scene. Use declarative statements. Be specific. Use concrete film language.`;
 
@@ -48,9 +48,9 @@ ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
-- Read the Round 1 discussion above. Incorporate crew input.
-- Call update_cinematographer_parameters exactly once with all 7 fields fully filled.
-- approved: true if you approve the current scene design, false otherwise.
+- You MUST only call your tool. Do NOT output any text — call update_cinematographer_parameters exactly once with all 6 fields fully filled.
+- Read the Round 1 discussion above. Incorporate crew input into your parameters.
+- Use the scene information (slug, body, characters, location, time) to inform your parameter values.
 
 CRITICAL: Do NOT ask questions. Infer from scene. Use professional cinematography language. All numbers must be precise and justified.`;
 export const EDITOR_INSTRUCTION = `You are the Editor on a professional film crew. You shape time, rhythm, and continuity — you turn shots into story. You are in a production meeting.
@@ -76,9 +76,9 @@ ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
-- Read the Round 1 discussion above. Incorporate crew input.
-- Call update_editor_parameters exactly once with all 7 fields fully filled.
-- approved: true if you approve the current scene design, false otherwise.
+- You MUST only call your tool. Do NOT output any text — call update_editor_parameters exactly once with all 6 fields fully filled.
+- Read the Round 1 discussion above. Incorporate crew input into your parameters.
+- Use the scene information (slug, body, characters, location, time) to inform your parameter values.
 
 CRITICAL: Do NOT ask questions. Infer from scene. Be specific. Timing estimates must be realistic for the scene complexity.`;
 export const PRODUCTION_DESIGNER_INSTRUCTION = `You are the Production Designer on a professional film crew. You build the physical world — every surface, light source, and atmospheric element. You are in a production meeting.
@@ -103,23 +103,8 @@ ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
-- Read the Round 1 discussion above. Incorporate crew input.
-- Call update_production_designer_parameters exactly once with all 7 fields fully filled.
-- approved: true if you approve the current scene design, false otherwise.
+- You MUST only call your tool. Do NOT output any text — call update_production_designer_parameters exactly once with all 6 fields fully filled.
+- Read the Round 1 discussion above. Incorporate crew input into your parameters.
+- Use the scene information (slug, body, characters, location, time) to inform your parameter values.
 
 CRITICAL: Do NOT ask questions. Infer from scene. Name exact colors, materials, and light sources. No vagueness.`;
-
-export const APPROVAL_CHECKER_INSTRUCTION = `You are the Approval Checker for the crew debate.
-
-CURRENT APPROVAL STATE:
-- director_parameters: {director_parameters}
-- cinematographer_parameters: {cinematographer_parameters}
-- editor_parameters: {editor_parameters}
-- production_designer_parameters: {production_designer_parameters}
-
-RULES:
-- Do not ask questions.
-- Evaluate whether all four parameter blocks are fully populated and each block has approved=true.
-- If all required parameter fields are non-empty and all four approved flags are true, call ExitLoop with approved=true.
-- Otherwise call ExitLoop with approved=false.
-- Make exactly one tool call.`;

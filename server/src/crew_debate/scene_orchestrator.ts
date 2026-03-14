@@ -4,7 +4,7 @@
  * For each scene:
  *   1. Set scene context (slug, body, characters, location, time) in state.
  *   2. Reset all 24 parameters and Round 1 proposal slots.
- *   3. Run 2 rounds of: Director → Cinematographer → Editor → ProductionDesigner → ApprovalChecker.
+ *   3. Run 2 rounds of: Director → Cinematographer → Editor → ProductionDesigner.
  *      - Round 1: DISCUSSION — each agent speaks about their scene/thinking direction ("I'm thinking in this direction — these could be our parameters"). No tool calls.
  *      - Round 2: PARAMETER SETTING — each agent reads Round 1 discussion from conversation and calls update_* with final parameters.
  *   4. Write last_scene_complete_index + last_scene_parameters to state so
@@ -21,8 +21,8 @@ import {
   cinematographerAgent,
   editorAgent,
   productionDesignerAgent,
-  approvalCheckerAgent,
 } from './agents.js';
+import { emptyCinematographerParams, emptyDirectorParams, emptyEditorParams, emptyProductionDesignerParams } from './helper.js';
 
 const ROUNDS = 2;
 
@@ -31,7 +31,6 @@ const CREW_ORDER = [
   cinematographerAgent,
   editorAgent,
   productionDesignerAgent,
-  approvalCheckerAgent,
 ] as const;
 
 // Create a SequentialAgent to orchestrate the crew in order with proper context passing
@@ -42,41 +41,6 @@ const crewDebateSequence = new SequentialAgent({
 });
 
 
-const emptyDirectorParams = () => ({
-  story_beat_action: '',
-  emotional_tone: '',
-  coverage_pacing: '',
-  character_blocking: '',
-  dialogue_subtext: '',
-  directorial_intent: '',
-});
-
-const emptyCinematographerParams = () => ({
-  focal_length_mm: '',
-  aperture_fstop: '',
-  camera_angle_tilt: '',
-  lighting_contrast_ratio: '',
-  color_temperature_kelvin: '',
-  exposure_iso: '',
-});
-
-const emptyProductionDesignerParams = () => ({
-  z_axis_clutter: '',
-  volumetrics_atmosphere: '',
-  location_set_geometry: '',
-  color_palette: '',
-  texture_materiality: '',
-  practical_lights: '',
-});
-
-const emptyEditorParams = () => ({
-  aspect_ratio: '',
-  eye_lines_180_rule: '',
-  match_cuts: '',
-  character_motion_arrows: '',
-  camera_motion_arrows: '',
-  duration_timing: '',
-});
 
 export class SceneOrchestratorAgent extends BaseAgent {
   constructor(name: string, subAgents: BaseAgent[] = []) {
@@ -107,7 +71,7 @@ export class SceneOrchestratorAgent extends BaseAgent {
 
       const scene = scenes[sceneIndex];
       if (!scene) continue;
-      // console.log(`\n[SceneOrchestrator] === Scene ${sceneIndex + 1}/${scenes.length}: ${scene.slug} ===`);
+      console.log(`\n[SceneOrchestrator] === Scene ${sceneIndex + 1}/${scenes.length}: ${scene.slug} ===`);
       // console.log(`\n InvocationContext Object -->`,ctx.session.state.director_parameters);
       // console.log(`\n InvocationContext Object -->`,ctx.session.state.cinematographer_parameters);
       // console.log(`\n InvocationContext Object -->`,ctx.session.state.production_designer_parameters);
@@ -141,11 +105,6 @@ export class SceneOrchestratorAgent extends BaseAgent {
         for await (const event of crewDebateSequence.runAsync(ctx)) {
           yield event;
         }
-
-        if (ctx.session.state['approved']) {
-          console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} approved in round ${round}. Exiting debate loop early.`);
-          break;
-        }
       }
 
       // Signal scene completion — index.ts polls this to emit scene_complete SSE
@@ -160,8 +119,8 @@ export class SceneOrchestratorAgent extends BaseAgent {
       };
 
       console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} — Final 24 Parameters:`);
-      console.log("ctx session state",ctx.session.state)
-      console.log(JSON.stringify(ctx.session.state['last_scene_parameters'], null, 2));
+      // console.log("ctx session state",ctx.session.state)
+      // console.log(JSON.stringify(ctx.session.state['last_scene_parameters'], null, 2));
       console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} parameters written.`);
     }
 

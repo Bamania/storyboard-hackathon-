@@ -11,7 +11,7 @@ import { z } from 'zod';
 export const updateDirectorParametersTool = new FunctionTool({
   name: 'update_director_parameters',
   description:
-    "Write the Director's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Director calls this. Call ONLY in Round 2.",
+    "Write the Director's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Only the Director calls this. Call ONLY in Round 2.",
   parameters: z.object({
     story_beat_action: z
       .string()
@@ -31,7 +31,6 @@ export const updateDirectorParametersTool = new FunctionTool({
     directorial_intent: z
       .string()
       .describe('One-sentence vision (e.g. "Audience must feel Cole is already too late")'),
-    approved: z.boolean().describe('True if Director approves current scene parameters, else false.'),
   }),
   execute: async (input, toolContext) => {
     console.log(`\n[updateDirectorParametersTool] Called with input:`, input);
@@ -49,7 +48,7 @@ export const updateDirectorParametersTool = new FunctionTool({
 export const updateCinematographerParametersTool = new FunctionTool({
   name: 'update_cinematographer_parameters',
   description:
-    "Write the Cinematographer's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
+    "Write the Cinematographer's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     focal_length_mm: z
       .string()
@@ -69,7 +68,6 @@ export const updateCinematographerParametersTool = new FunctionTool({
     exposure_iso: z
       .string()
       .describe('ISO with intent (e.g. "ISO 1600 — visible grain, documentary unease")'),
-    approved: z.boolean().describe('True if Cinematographer approves current scene parameters, else false.'),
   }),
   execute: async (input, toolContext) => {
     console.log(`\n[updateCinematographerParametersTool] Called with input:`, input);
@@ -83,7 +81,7 @@ export const updateCinematographerParametersTool = new FunctionTool({
 export const updateProductionDesignerParametersTool = new FunctionTool({
   name: 'update_production_designer_parameters',
   description:
-    "Write the Production Designer's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
+    "Write the Production Designer's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     z_axis_clutter: z
       .string()
@@ -107,7 +105,6 @@ export const updateProductionDesignerParametersTool = new FunctionTool({
       .describe(
         'Exact practical sources in frame (e.g. "overhead fluorescent flicker 2Hz, red EXIT sign back-right")',
       ),
-    approved: z.boolean().describe('True if Production Designer approves current scene parameters, else false.'),
   }),
   execute: async (input, toolContext) => {
     console.log(`\n[updateProductionDesignerParametersTool] Called with input:`, input);
@@ -121,7 +118,7 @@ export const updateProductionDesignerParametersTool = new FunctionTool({
 export const updateEditorParametersTool = new FunctionTool({
   name: 'update_editor_parameters',
   description:
-    "Write the Editor's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
+    "Write the Editor's 6 parameters for this scene. You MUST call this with ALL 6 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     aspect_ratio: z
       .string()
@@ -147,7 +144,6 @@ export const updateEditorParametersTool = new FunctionTool({
     duration_timing: z
       .string()
       .describe('Total duration and shot breakdown (e.g. "2m10s — 8s WS, 4s MS×3, 2s CU×4, 12s final hold")'),
-    approved: z.boolean().describe('True if Editor approves current scene parameters, else false.'),
   }),
   execute: async (input, toolContext) => {
     console.log(`\n[updateEditorParametersTool] Called with input:`, input);
@@ -156,25 +152,6 @@ export const updateEditorParametersTool = new FunctionTool({
     toolContext.state.set('editor_parameters', { ...input });
     return { status: 'updated', agent: 'Editor', fields: Object.keys(input) };
   },
-});
-
-
-export const exitLoopTool=new FunctionTool({
-name:'ExitLoop',
-description:'call this if all the crew members have given their inputs and the scene parameters are ready to be approved by the director',
-parameters:z.object({
-    approved:z.boolean().describe("true if director approves the scene parameters and ready to move to next scene, false if director wants another round of debate")
-}
-),
-execute:(input,ToolContext)=>{
-  if(!ToolContext?.state) throw new Error("ToolContext state is required to use ExitLoop tool") ;
-  ToolContext.state.set("approved",input.approved) ;
-  if(input.approved){
-    console.log("[ExitLoopTool] received approval to exit the loop, updating state and escalating...") ;
-    ToolContext.actions.escalate=true; // this will break the loop in the orchestrator agent
-  }
-  return { approved: input.approved };
-}
 });
 
 // /**
