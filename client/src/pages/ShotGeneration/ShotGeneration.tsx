@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
+import { GenUi } from '../../components/genUi';
 import { useScreenplayStore } from '../../stores/screenplayStore';
 import { useShotStore } from '../../stores/shotStore';
 import { useNavigationStore } from '../../stores/navigationStore';
@@ -651,23 +652,28 @@ const ShotGeneration: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Message text */}
-                  <p
-                    style={{
-                      fontSize: 14,
-                      lineHeight: 1.65,
-                      color: '#2C2C2C',
-                      margin: 0,
-                      paddingLeft: 16,
-                      fontFamily: '"Inter", system-ui, sans-serif',
-                      whiteSpace: 'pre-wrap',
-                    }}
-                  >
-                    {msg.text}
-                    {msg.streaming && (
-                      <span style={{ display: 'inline-block', width: 2, height: '1em', marginLeft: 2, background: agentCfg?.color || '#999', animation: 'blink 0.8s step-end infinite', verticalAlign: 'text-bottom' }} />
+                  {/* Message content — GenUi for params, plain text for discussion */}
+                  <div style={{ paddingLeft: 16 }}>
+                    {msg.text.startsWith('Set parameters:\n') ? (
+                      <GenUi data={{ type: 'params', content: msg.text }} />
+                    ) : (
+                      <p
+                        style={{
+                          fontSize: 14,
+                          lineHeight: 1.65,
+                          color: '#2C2C2C',
+                          margin: 0,
+                          fontFamily: '"Inter", system-ui, sans-serif',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {msg.text}
+                        {msg.streaming && (
+                          <span style={{ display: 'inline-block', width: 2, height: '1em', marginLeft: 2, background: agentCfg?.color || '#999', animation: 'blink 0.8s step-end infinite', verticalAlign: 'text-bottom' }} />
+                        )}
+                      </p>
                     )}
-                  </p>
+                  </div>
                 </div>
               );
             })}
