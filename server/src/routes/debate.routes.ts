@@ -182,23 +182,12 @@ debateRouter.post('/', async (req, res) => {
       newMessage: createUserContent('Begin the crew debate for shot design'),
       runConfig,
     })) {
-      // Poll session FIRST so debate_chunk gets the correct scene_index
+      // Poll session for last_scene_complete_index (scene_index poll is unreliable during run)
       const session = await runner.sessionService.getSession({
         appName: APP_NAME,
         userId,
         sessionId,
       });
-      const currentSceneIndex = (session?.state?.['scene_index'] as number) ?? 0;
-      if (currentSceneIndex > lastSceneIndex) {
-        const scene = scenes[currentSceneIndex];
-        sendEvent({
-          type: 'scene_start',
-          scene_index: currentSceneIndex,
-          scene_slug: scene?.slug,
-          total_scenes: scenes.length,
-        });
-        lastSceneIndex = currentSceneIndex;
-      }
 
       const parts = event.content?.parts ?? [];
       const author = event.author as string;

@@ -14,6 +14,9 @@ Editor chose: {editor_parameters}
 
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
 
+MANDATORY: You MUST generate your full output for this scene. Do not skip, defer, or summarize. Produce your complete contribution (Round 1 thoughts and Round 2 parameters) for every scene you are given.
+- Use ONLY the CURRENT SCENE info above (slug, body, characters, location, time). Current scene changes automatically — base your thoughts and tool parameters solely on this scene, not previous scenes.
+
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Keep your response to 2-3 lines only. Be concise.
 - Share your scene vision and thinking direction in brief. Say things like "I'm thinking in this direction — these could be our parameters..."
@@ -42,6 +45,9 @@ Editor chose: {editor_parameters}
 
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
 
+MANDATORY: You MUST generate your full output for this scene. Do not skip, defer, or summarize. Produce your complete contribution (Round 1 thoughts and Round 2 parameters) for every scene you are given.
+- Use ONLY the CURRENT SCENE info above (slug, body, characters, location, time). Current scene changes automatically — base your thoughts and tool parameters solely on this scene, not previous scenes.
+
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Keep your response to 2-3 lines only. Be concise.
 - Share your lens, lighting, and camera approach in brief.
@@ -68,6 +74,9 @@ Cinematographer chose: {cinematographer_parameters}
 Production Designer chose: {production_designer_parameters}
 
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
+
+MANDATORY: You MUST generate your full output for this scene. Do not skip, defer, or summarize. Produce your complete contribution (Round 1 thoughts and Round 2 parameters) for every scene you are given.
+- Use ONLY the CURRENT SCENE info above (slug, body, characters, location, time). Current scene changes automatically — base your thoughts and tool parameters solely on this scene, not previous scenes.
 
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Speak naturally. Share your scene vision and thinking direction.
@@ -96,6 +105,9 @@ Cinematographer chose: {cinematographer_parameters}
 Editor chose: {editor_parameters}
 
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
+
+MANDATORY: You MUST generate your full output for this scene. Do not skip, defer, or summarize. Produce your complete contribution (Round 1 thoughts and Round 2 parameters) for every scene you are given.
+- Use ONLY the CURRENT SCENE info above (slug, body, characters, location, time). Current scene changes automatically — base your thoughts and tool parameters solely on this scene, not previous scenes.
 
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
 - Keep your response to 2-3 lines only. Be concise.
