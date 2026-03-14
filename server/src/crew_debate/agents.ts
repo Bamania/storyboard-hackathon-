@@ -30,7 +30,7 @@ export const directorAgent = new LlmAgent({
   name: 'Director',
   model: GEMINI_MODEL,
   description:
-    'Fills the 6 director parameters (story beat, tone, pacing, blocking, subtext, intent) for the current scene.',
+    'Round 1: Shares thoughts. Round 2: Sets final director parameters.',
   instruction: DIRECTOR_INSTRUCTION,
   tools: [updateDirectorParametersTool],
   includeContents: 'none',
@@ -41,7 +41,7 @@ export const cinematographerAgent = new LlmAgent({
   name: 'Cinematographer',
   model: GEMINI_MODEL,
   description:
-    'Fills the 6 cinematographer parameters (lens, aperture, angle, contrast, color temp, ISO) for the current scene.',
+    'Round 1: Shares thoughts. Round 2: Sets final cinematographer parameters.',
   instruction: CINEMATOGRAPHER_INSTRUCTION,
   tools: [updateCinematographerParametersTool],
   includeContents: 'none',
@@ -52,7 +52,7 @@ export const editorAgent = new LlmAgent({
   name: 'Editor',
   model: GEMINI_MODEL,
   description:
-    'Fills the 6 editor parameters (aspect ratio, 180-rule, match cuts, motion arrows, camera motion, timing) for the current scene.',
+    'Round 1: Shares thoughts. Round 2: Sets final editor parameters.',
   instruction: EDITOR_INSTRUCTION,
   tools: [updateEditorParametersTool],
   includeContents: 'none',
@@ -63,7 +63,7 @@ export const productionDesignerAgent = new LlmAgent({
   name: 'ProductionDesigner',
   model: GEMINI_MODEL,
   description:
-    'Fills the 6 production design parameters (z-axis, volumetrics, geometry, palette, texture, practicals) for the current scene.',
+    'Round 1: Shares thoughts. Round 2: Sets final production designer parameters.',
   instruction: PRODUCTION_DESIGNER_INSTRUCTION,
   tools: [updateProductionDesignerParametersTool],
   includeContents: 'none',

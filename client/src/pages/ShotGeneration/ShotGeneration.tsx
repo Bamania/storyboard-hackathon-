@@ -122,6 +122,9 @@ const ShotGeneration: React.FC = () => {
       let buffer = '';
       // Track the last agent message per agent to append streaming chunks
       const activeAgentMsg: Record<string, string> = {};
+      // Track scene index as we process stream (closure's currentSceneIndex is stale)
+      let effectiveSceneIndex = 0;
+      const accumulatedSceneParams: Record<number, Record<string, unknown>> = {};
 
       while (true) {
         const { done, value } = await reader.read();
@@ -138,6 +141,7 @@ const ShotGeneration: React.FC = () => {
           switch (event.type) {
             case 'scene_start': {
               const idx = event.scene_index as number;
+              effectiveSceneIndex = idx;
               setCurrentScene(idx);
               break;
             }
@@ -146,7 +150,7 @@ const ShotGeneration: React.FC = () => {
               if (!role) break;
               const chunk = event.chunk as string;
               const isDone = event.done as boolean;
-              const agentKey = `${role}-${currentSceneIndex}`;
+              const agentKey = `${role}-${effectiveSceneIndex}`;
 
               if (activeAgentMsg[agentKey] !== undefined) {
                 // Append to existing streaming message
@@ -154,9 +158,14 @@ const ShotGeneration: React.FC = () => {
                 const currentText = activeAgentMsg[agentKey];
                 setDebateMessages((prev) => {
                   const updated = [...prev];
-                  const lastIdx = updated.findLastIndex(
-                    (m) => m.agent === role && m.streaming
-                  );
+                  let lastIdx = -1;
+                  for (let i = updated.length - 1; i >= 0; i--) {
+                    const m = updated[i];
+                    if (m.agent === role && m.sceneIndex === effectiveSceneIndex && m.streaming) {
+                      lastIdx = i;
+                      break;
+                    }
+                  }
                   if (lastIdx >= 0) {
                     updated[lastIdx] = { ...updated[lastIdx], text: currentText, streaming: !isDone };
                   }
@@ -168,7 +177,7 @@ const ShotGeneration: React.FC = () => {
                 const id = `msg-${++msgIdRef.current}`;
                 setDebateMessages((prev) => [
                   ...prev,
-                  { id, agent: role, text: chunk, sceneIndex: currentSceneIndex, streaming: !isDone },
+                  { id, agent: role, text: chunk, sceneIndex: effectiveSceneIndex, streaming: !isDone },
                 ]);
               }
 
@@ -181,15 +190,17 @@ const ShotGeneration: React.FC = () => {
               const idx = event.scene_index as number;
               completeScene(idx);
               if (event.shot_parameters) {
-                setSceneParams((prev) => ({ ...prev, [idx]: event.shot_parameters as Record<string, unknown> }));
+                const params = event.shot_parameters as Record<string, unknown>;
+                accumulatedSceneParams[idx] = params;
+                setSceneParams((prev) => ({ ...prev, [idx]: params }));
               }
               break;
             }
             case 'done': {
               setComplete();
-              // Build frames from scene params for Storyboard page
+              // Build frames from accumulated params (not stale closure state)
               const frames: Frame[] = [];
-              Object.entries(sceneParams).forEach(([sceneIdx, params]) => {
+              Object.entries(accumulatedSceneParams).forEach(([sceneIdx]) => {
                 const sIdx = Number(sceneIdx);
                 const scene = sceneList[sIdx];
                 if (!scene) return;
@@ -230,7 +241,7 @@ const ShotGeneration: React.FC = () => {
       setIsDebating(false);
       abortRef.current = null;
     }
-  }, [sceneList, currentSceneIndex]);
+  }, [sceneList]);
 
   const handleSceneClick = (idx: number) => {
     setCurrentScene(idx);

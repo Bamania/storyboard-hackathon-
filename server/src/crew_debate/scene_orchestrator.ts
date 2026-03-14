@@ -3,12 +3,12 @@
  *
  * For each scene:
  *   1. Set scene context (slug, body, characters, location, time) in state.
- *   2. Reset all 24 parameters to empty strings.
- *   3. Run 2 rounds of: Director → Cinematographer → Editor → ProductionDesigner.
- *      - Round 1: initial proposals based on the scene.
- *      - Round 2: revisions after seeing each other's Round 1 output.
+ *   2. Reset all 24 parameters and Round 1 proposal slots.
+ *   3. Run 2 rounds of: Director → Cinematographer → Editor → ProductionDesigner → ApprovalChecker.
+ *      - Round 1: DISCUSSION — each agent speaks about their scene/thinking direction ("I'm thinking in this direction — these could be our parameters"). No tool calls.
+ *      - Round 2: PARAMETER SETTING — each agent reads Round 1 discussion from conversation and calls update_* with final parameters.
  *   4. Write last_scene_complete_index + last_scene_parameters to state so
- *      the SSE layer in index.ts can emit a scene_complete event.
+ *      the SSE layer can emit a scene_complete event.
  *
  * Each agent reads the full shared state via instruction template vars but
  * may only write to its own parameter block via its dedicated tool.
@@ -125,13 +125,13 @@ export class SceneOrchestratorAgent extends BaseAgent {
       ctx.session.state['editor_approved'] = false;
       ctx.session.state['production_designer_approved'] = false;
 
-      // Reset all 24 parameters to empty strings for this scene (JSON stored to avoid [object Object] serialization issues in instruction injection)
+      // Reset all 24 parameters for this scene
       ctx.session.state['director_parameters'] = JSON.stringify(emptyDirectorParams(), null, 2);
       ctx.session.state['cinematographer_parameters'] = JSON.stringify(emptyCinematographerParams(), null, 2);
       ctx.session.state['production_designer_parameters'] = JSON.stringify(emptyProductionDesignerParams(), null, 2);
       ctx.session.state['editor_parameters'] = JSON.stringify(emptyEditorParams(), null, 2);
-      
-      // 2 rounds: Round 1 = initial proposals; Round 2 = cross-informed revisions
+
+      // 2 rounds: Round 1 = share thoughts (text only); Round 2 = set parameters (tool calls)
       for (let round = 1; round <= ROUNDS; round++) {
 
         ctx.session.state['debate_round'] = round;

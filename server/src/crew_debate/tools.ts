@@ -11,7 +11,7 @@ import { z } from 'zod';
 export const updateDirectorParametersTool = new FunctionTool({
   name: 'update_director_parameters',
   description:
-    "Write the Director's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Director calls this.",
+    "Write the Director's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Director calls this. Call ONLY in Round 2.",
   parameters: z.object({
     story_beat_action: z
       .string()
@@ -49,7 +49,7 @@ export const updateDirectorParametersTool = new FunctionTool({
 export const updateCinematographerParametersTool = new FunctionTool({
   name: 'update_cinematographer_parameters',
   description:
-    "Write the Cinematographer's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Cinematographer calls this.",
+    "Write the Cinematographer's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     focal_length_mm: z
       .string()
@@ -83,7 +83,7 @@ export const updateCinematographerParametersTool = new FunctionTool({
 export const updateProductionDesignerParametersTool = new FunctionTool({
   name: 'update_production_designer_parameters',
   description:
-    "Write the Production Designer's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Production Designer calls this.",
+    "Write the Production Designer's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     z_axis_clutter: z
       .string()
@@ -121,7 +121,7 @@ export const updateProductionDesignerParametersTool = new FunctionTool({
 export const updateEditorParametersTool = new FunctionTool({
   name: 'update_editor_parameters',
   description:
-    "Write the Editor's 6 parameters plus approval flag for this scene. You MUST call this with ALL 7 fields fully filled. Only the Editor calls this.",
+    "Write the Editor's 6 parameters plus approval flag. You MUST call this with ALL 7 fields fully filled. Call ONLY in Round 2.",
   parameters: z.object({
     aspect_ratio: z
       .string()

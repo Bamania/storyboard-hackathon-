@@ -13,6 +13,24 @@ export const debateRouter = Router();
 const APP_NAME = 'crew_debate';
 const CREW_AGENTS = new Set(['Director', 'Cinematographer', 'Editor', 'ProductionDesigner']);
 
+/** Map update tool names to agent display names for streaming */
+const TOOL_TO_AGENT: Record<string, string> = {
+  update_director_parameters: 'Director',
+  update_cinematographer_parameters: 'Cinematographer',
+  update_editor_parameters: 'Editor',
+  update_production_designer_parameters: 'ProductionDesigner',
+};
+
+function formatParamsForDisplay(args: Record<string, unknown>): string {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (key === 'approved') continue;
+    const val = value != null ? String(value) : '';
+    if (val) lines.push(`• ${key}: ${val}`);
+  }
+  return lines.length > 0 ? lines.join('\n') : '(parameters set)';
+}
+
 debateRouter.post('/', async (req, res) => {
   const script = req.body?.script as string | undefined;
   const scenesInput = req.body?.scenes as SceneContext[] | undefined;
@@ -134,9 +152,24 @@ debateRouter.post('/', async (req, res) => {
 
       for (const p of parts) {
         const part = p as Record<string, unknown>;
+
+        // Stream text output (Round 1 discussion, or any agent speech)
         const text = part.text as string | undefined;
         if (text && CREW_AGENTS.has(author)) {
           sendEvent({ type: 'debate_chunk', agent: author, chunk: text, done: !isPartial });
+        }
+
+        // Stream function calls (Round 2 parameter setting) — emit as readable message
+        const fc = (part.functionCall ?? part.function_call) as
+          | { name?: string; args?: Record<string, unknown>; arguments?: Record<string, unknown> }
+          | undefined;
+        if (fc?.name) {
+          const agentName = TOOL_TO_AGENT[fc.name];
+          const args = fc.args ?? fc.arguments ?? {};
+          if (agentName && CREW_AGENTS.has(agentName)) {
+            const formatted = `Set parameters:\n${formatParamsForDisplay(args)}`;
+            sendEvent({ type: 'debate_chunk', agent: agentName, chunk: formatted, done: true });
+          }
         }
       }
 
