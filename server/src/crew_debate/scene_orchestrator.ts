@@ -107,9 +107,8 @@ export class SceneOrchestratorAgent extends BaseAgent {
         }
       }
 
-      // Signal scene completion — index.ts polls this to emit scene_complete SSE
-      ctx.session.state['last_scene_complete_index'] = sceneIndex;
-      ctx.session.state['last_scene_parameters'] = {
+      // Signal scene completion — yield custom event for debate.routes to emit scene_complete SSE
+      const sceneParams = {
         scene_slug: scene.slug,
         scene_index: sceneIndex,
         director_parameters: ctx.session.state['director_parameters'],
@@ -117,6 +116,22 @@ export class SceneOrchestratorAgent extends BaseAgent {
         production_designer_parameters: ctx.session.state['production_designer_parameters'],
         editor_parameters: ctx.session.state['editor_parameters'],
       };
+      ctx.session.state['last_scene_complete_index'] = sceneIndex;
+      ctx.session.state['last_scene_parameters'] = sceneParams;
+
+      yield {
+        author: 'SceneOrchestrator',
+        content: {
+          parts: [
+            {
+              functionCall: {
+                name: 'scene_complete',
+                args: { scene_index: sceneIndex, shot_parameters: sceneParams },
+              },
+            },
+          ],
+        },
+      } as unknown as Event;
 
       console.log(`[SceneOrchestrator] Scene ${sceneIndex + 1} — Final 24 Parameters:`);
       // console.log("ctx session state",ctx.session.state)
