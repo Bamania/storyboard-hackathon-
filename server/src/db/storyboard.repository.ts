@@ -47,18 +47,23 @@ export async function createStoryboard(
   });
 }
 
-/** Set storyboard status to DEBATING and return ordered scene IDs. */
-export async function startDebate(storyboardId: number) {
-  await prisma.storyboard.update({
-    where: { id: storyboardId },
-    data: { status: 'DEBATING' },
-  });
+/** Get ordered scene IDs for a storyboard (without changing status). */
+export async function getStoryboardSceneIds(storyboardId: number) {
   const scenes = await prisma.scene.findMany({
     where: { storyboardId },
     orderBy: { position: 'asc' },
     select: { id: true },
   });
   return scenes.map((s) => s.id);
+}
+
+/** Set storyboard status to DEBATING and return ordered scene IDs. */
+export async function startDebate(storyboardId: number) {
+  await prisma.storyboard.update({
+    where: { id: storyboardId },
+    data: { status: 'DEBATING' },
+  });
+  return getStoryboardSceneIds(storyboardId);
 }
 
 /** Mark storyboard as COMPLETE. */

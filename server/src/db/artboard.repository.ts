@@ -21,3 +21,28 @@ export async function createArtboard(sceneId: number, params: CrewParams) {
     },
   });
 }
+
+/** Update an Artboard with generated image and metadata. */
+export async function updateArtboard(
+  id: number,
+  data: {
+    shotDescription?: string;
+    imageUrl?: string;
+    status?: 'PARAMS_READY' | 'GENERATING' | 'DONE' | 'FAILED';
+    generationDurationMs?: number;
+    errorMessage?: string;
+  }
+) {
+  return prisma.artboard.update({
+    where: { id },
+    data,
+  });
+}
+
+/** Get an Artboard with its scene. */
+export async function getArtboardWithScene(id: number) {
+  return prisma.artboard.findUnique({
+    where: { id },
+    include: { scene: true },
+  });
+}

@@ -62,6 +62,8 @@ export interface Frame {
   instantParams: InstantParams;
   deepParams: DeepParams;
   isRegenerating?: boolean;
+  /** Formatted camera params from crew debate (e.g. "24mm f/2.8 3200K") */
+  paramsDisplay?: string;
 }
 
 // ─── Tier 1: Instant Parameters ─────────────────────

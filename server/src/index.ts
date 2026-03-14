@@ -6,7 +6,7 @@ import 'dotenv/config';
 
 import cors from 'cors';
 import express from 'express';
-import { scriptRouter, storyboardRouter, debateRouter, castRouter } from './routes/index.js';
+import { scriptRouter, storyboardRouter, debateRouter, castRouter, imgGenRouter } from './routes/index.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -27,6 +27,7 @@ app.use('/api', scriptRouter);
 app.use('/api/storyboards', storyboardRouter);
 app.use('/api/debate', debateRouter);
 app.use('/api', castRouter);
+app.use('/api', imgGenRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { InMemoryRunner, StreamingMode } from '@google/adk';
 import type { RunConfig } from '@google/adk';
 import { createUserContent } from '@google/genai';
-import { startDebate, completeStoryboard, createArtboard } from '../db/index.js';
+import { createStoryboard, startDebate, completeStoryboard, createArtboard, getStoryboardSceneIds } from '../db/index.js';
 import { parseScriptToScenes } from '../pipeline/script_parser.js';
 import type { SceneContext } from '../crew_debate/types.js';
 // import { rootAgent } from '../crew_debate/manager.js';
@@ -46,10 +46,51 @@ debateRouter.post('/', async (req, res) => {
     return;
   }
 
-  // Look up DB scene IDs so we can link artboards to the correct scene rows
+  // Ensure we have a storyboard in DB for persistence — create one if missing or mismatched
+  let effectiveStoryboardId = storyboardId ?? null;
   let dbSceneIds: number[] = [];
-  if (storyboardId) {
-    dbSceneIds = await startDebate(storyboardId);
+
+  if (effectiveStoryboardId) {
+    const existingSceneIds = await getStoryboardSceneIds(effectiveStoryboardId);
+    // If scene count doesn't match, the storyboard is stale (e.g. from a previous generation).
+    // Create a new storyboard so artboards are linked to the scenes we're actually debating.
+    if (existingSceneIds.length !== scenes.length) {
+      console.log(
+        `[Debate] Storyboard #${effectiveStoryboardId} has ${existingSceneIds.length} scenes but debate has ${scenes.length} — creating new storyboard`,
+      );
+      const script = scenes.map((s) => `${s.slug}\n${s.body}`).join('\n\n');
+      const characters = Array.from(
+        new Set(scenes.flatMap((s) => s.characters).filter(Boolean)),
+      ).map((name) => ({ name: String(name), description: 'Character from screenplay' }));
+      const storyboard = await createStoryboard(
+        'Shot design from crew debate',
+        script,
+        characters,
+        scenes,
+      );
+      effectiveStoryboardId = storyboard.id;
+      dbSceneIds = storyboard.scenes.map((s) => s.id);
+      console.log(`[Debate] Created Storyboard #${effectiveStoryboardId} with ${dbSceneIds.length} scenes for persistence`);
+    } else {
+      dbSceneIds = existingSceneIds;
+      await startDebate(effectiveStoryboardId);
+      console.log(`[Debate] Using Storyboard #${effectiveStoryboardId} with ${dbSceneIds.length} scenes`);
+    }
+  } else {
+    // No storyboardId: create one from scenes so we can persist artboards
+    const script = scenes.map((s) => `${s.slug}\n${s.body}`).join('\n\n');
+    const characters = Array.from(
+      new Set(scenes.flatMap((s) => s.characters).filter(Boolean)),
+    ).map((name) => ({ name: String(name), description: 'Character from screenplay' }));
+    const storyboard = await createStoryboard(
+      'Shot design from crew debate',
+      script,
+      characters,
+      scenes,
+    );
+    effectiveStoryboardId = storyboard.id;
+    dbSceneIds = storyboard.scenes.map((s) => s.id);
+    console.log(`[Debate] Created Storyboard #${effectiveStoryboardId} with ${dbSceneIds.length} scenes for persistence`);
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -128,6 +169,7 @@ debateRouter.post('/', async (req, res) => {
       state: initialState,
     });
 
+    sendEvent({ type: 'storyboard_id', storyboardId: effectiveStoryboardId });
     sendEvent({ type: 'scene_start', scene_index: 0, scene_slug: scenes[0]?.slug, total_scenes: scenes.length });
 
     let lastEmittedSceneComplete = -1;
@@ -156,7 +198,7 @@ debateRouter.post('/', async (req, res) => {
         // Stream text output (Round 1 discussion, or any agent speech)
         const text = part.text as string | undefined;
         if (text && CREW_AGENTS.has(author)) {
-          sendEvent({ type: 'debate_chunk', agent: author, chunk: text, done: !isPartial });
+          sendEvent({ type: 'debate_chunk', agent: author, chunk: text, done: !isPartial, scene_index: lastSceneIndex });
         }
 
         // Stream function calls (Round 2 parameter setting) — emit as readable message
@@ -168,7 +210,7 @@ debateRouter.post('/', async (req, res) => {
           const args = fc.args ?? fc.arguments ?? {};
           if (agentName && CREW_AGENTS.has(agentName)) {
             const formatted = `Set parameters:\n${formatParamsForDisplay(args)}`;
-            sendEvent({ type: 'debate_chunk', agent: agentName, chunk: formatted, done: true });
+            sendEvent({ type: 'debate_chunk', agent: agentName, chunk: formatted, done: true, scene_index: lastSceneIndex });
           }
         }
       }
@@ -198,18 +240,30 @@ debateRouter.post('/', async (req, res) => {
         sendEvent({ type: 'scene_complete', scene_index: lastComplete, shot_parameters: sceneParams ?? {} });
         lastEmittedSceneComplete = lastComplete;
 
-        // Persist artboard to DB
-        if (storyboardId && dbSceneIds[lastComplete]) {
+        // Persist artboard to DB (always — we have effectiveStoryboardId and dbSceneIds)
+        const sceneId = dbSceneIds[lastComplete];
+        if (sceneId) {
           try {
-            await createArtboard(dbSceneIds[lastComplete], {
-              directorParams: (sceneParams?.['director_parameters'] as object) ?? {},
-              cinematographerParams: (sceneParams?.['cinematographer_parameters'] as object) ?? {},
-              productionDesignerParams: (sceneParams?.['production_designer_parameters'] as object) ?? {},
-              editorParams: (sceneParams?.['editor_parameters'] as object) ?? {},
+            const params = sceneParams ?? {};
+            const toObj = (v: unknown): object => {
+              if (!v) return {};
+              if (typeof v === 'object' && !Array.isArray(v)) return v as object;
+              if (typeof v === 'string') { try { return JSON.parse(v) as object; } catch { return {}; } }
+              return {};
+            };
+            const directorParams = { ...toObj(params['director_parameters']), scene_number: lastComplete + 1 };
+            await createArtboard(sceneId, {
+              directorParams,
+              cinematographerParams: toObj(params['cinematographer_parameters']),
+              productionDesignerParams: toObj(params['production_designer_parameters']),
+              editorParams: toObj(params['editor_parameters']),
             });
+            console.log(`[Debate] Persisted artboard for scene ${lastComplete} (sceneId=${sceneId})`);
           } catch (dbErr) {
             console.error(`[Debate] Failed to persist artboard for scene ${lastComplete}:`, dbErr);
           }
+        } else {
+          console.warn(`[Debate] No DB scene ID for index ${lastComplete} — skipping artboard persist`);
         }
       }
     }
@@ -225,22 +279,33 @@ debateRouter.post('/', async (req, res) => {
       const sceneParams = finalSession?.state?.['last_scene_parameters'] as Record<string, unknown>;
       sendEvent({ type: 'scene_complete', scene_index: finalLastComplete, shot_parameters: sceneParams ?? {} });
 
-      if (storyboardId && dbSceneIds[finalLastComplete]) {
+      const sceneId = dbSceneIds[finalLastComplete];
+      if (sceneId) {
         try {
-          await createArtboard(dbSceneIds[finalLastComplete], {
-            directorParams: (sceneParams?.['director_parameters'] as object) ?? {},
-            cinematographerParams: (sceneParams?.['cinematographer_parameters'] as object) ?? {},
-            productionDesignerParams: (sceneParams?.['production_designer_parameters'] as object) ?? {},
-            editorParams: (sceneParams?.['editor_parameters'] as object) ?? {},
+          const params = sceneParams ?? {};
+          const toObj = (v: unknown): object => {
+            if (!v) return {};
+            if (typeof v === 'object' && !Array.isArray(v)) return v as object;
+            if (typeof v === 'string') { try { return JSON.parse(v) as object; } catch { return {}; } }
+            return {};
+          };
+          const directorParams = { ...toObj(params['director_parameters']), scene_number: finalLastComplete + 1 };
+          await createArtboard(sceneId, {
+            directorParams,
+            cinematographerParams: toObj(params['cinematographer_parameters']),
+            productionDesignerParams: toObj(params['production_designer_parameters']),
+            editorParams: toObj(params['editor_parameters']),
           });
+          console.log(`[Debate] Persisted final artboard for scene ${finalLastComplete} (sceneId=${sceneId})`);
         } catch (dbErr) {
           console.error(`[Debate] Failed to persist final artboard:`, dbErr);
         }
       }
     }
 
-    if (storyboardId) {
-      await completeStoryboard(storyboardId);
+    if (effectiveStoryboardId) {
+      await completeStoryboard(effectiveStoryboardId);
+      console.log(`[Debate] Marked Storyboard #${effectiveStoryboardId} as COMPLETE`);
     }
 
     sendEvent({ type: 'done' });

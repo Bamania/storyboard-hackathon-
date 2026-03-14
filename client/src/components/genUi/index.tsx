@@ -27,7 +27,7 @@ function formatKey(key: string): string {
     .join(' ');
 }
 
-export const ParamsUi = ({ data }: { data: { type: string; content: string } }) => {
+export const ParamsUi = ({ data }: { data: { type: string; content: string; sceneNumber?: number } }) => {
   const pairs = parseParamsContent(data.content);
   if (pairs.length === 0) return null;
 
@@ -56,7 +56,7 @@ export const ParamsUi = ({ data }: { data: { type: string; content: string } }) 
         }}
       >
         <span style={{ fontSize: 12 }}>⚙</span>
-        Parameters set
+        {data.sceneNumber != null ? `Scene ${data.sceneNumber} — Parameters set` : 'Parameters set'}
       </div>
       <div
         style={{
@@ -103,7 +103,7 @@ export const ParamsUi = ({ data }: { data: { type: string; content: string } }) 
   );
 };
 
-export function GenUi({ data }: { data: { type: string; content: string } }) {
+export function GenUi({ data }: { data: { type: string; content: string; sceneNumber?: number } }) {
   if (data.type === 'params') {
     return <ParamsUi data={data} />;
   }

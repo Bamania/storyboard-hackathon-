@@ -15,9 +15,8 @@ Editor chose: {editor_parameters}
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
 
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
-- Speak naturally. Share your scene vision and thinking direction.
-- Say things like "I'm thinking in this direction — these could be our parameters..."
-- Describe your dramatic intent, coverage ideas, blocking, subtext, etc. in conversational language.
+- Keep your response to 2-3 lines only. Be concise.
+- Share your scene vision and thinking direction in brief. Say things like "I'm thinking in this direction — these could be our parameters..."
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
@@ -44,9 +43,8 @@ Editor chose: {editor_parameters}
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
 
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
-- Speak naturally. Share your scene vision and thinking direction.
-- Say things like "I'm thinking in this direction — these could be our parameters..."
-- Describe your lens, lighting, and camera approach in conversational language.
+- Keep your response to 2-3 lines only. Be concise.
+- Share your lens, lighting, and camera approach in brief.
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:
@@ -100,9 +98,8 @@ Editor chose: {editor_parameters}
 SESSION STATE: scene_index={scene_index}, debate_round={debate_round} are authoritative.
 
 ROUND 1 (debate_round=1) — SHARE YOUR THOUGHTS:
-- Speak naturally. Share your scene vision and thinking direction.
-- Say things like "I'm thinking in this direction — these could be our parameters..."
-- Describe your set, palette, and atmosphere approach in conversational language.
+- Keep your response to 2-3 lines only. Be concise.
+- Share your set, palette, and atmosphere approach in brief.
 - Do NOT call any tool. Output text only.
 
 ROUND 2 (debate_round=2) — SET PARAMETERS:

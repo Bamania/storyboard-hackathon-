@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { GenUi } from '../../components/genUi';
 import { useScreenplayStore } from '../../stores/screenplayStore';
@@ -44,6 +45,7 @@ interface DebateMessage {
 }
 
 const ShotGeneration: React.FC = () => {
+  const navigate = useNavigate();
   const { completeStep } = useNavigationStore();
   useEffect(() => { completeStep(3); }, []);
   const { scenes } = useScreenplayStore();
@@ -56,9 +58,10 @@ const ShotGeneration: React.FC = () => {
     setIsDebating,
     isComplete,
     setComplete,
+    reset: resetShotStore,
   } = useShotStore();
   const { setFrames } = useStoryboardStore();
-  const { storyboardId } = useStoryStore();
+  const { storyboardId, setStoryboardId } = useStoryStore();
 
   const [selectedAgent, setSelectedAgent] = useState<AgentRole | null>(null);
   const [debateMessages, setDebateMessages] = useState<DebateMessage[]>([]);
@@ -87,6 +90,7 @@ const ShotGeneration: React.FC = () => {
   /** Start the SSE debate stream */
   const startDebate = useCallback(async () => {
     if (sceneList.length === 0) return;
+    resetShotStore();
     setIsDebating(true);
     setError(null);
     setDebateMessages([]);
@@ -140,6 +144,11 @@ const ShotGeneration: React.FC = () => {
           try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
           switch (event.type) {
+            case 'storyboard_id': {
+              const id = event.storyboardId as number;
+              if (typeof id === 'number') setStoryboardId(id);
+              break;
+            }
             case 'scene_start': {
               const idx = event.scene_index as number;
               effectiveSceneIndex = idx;
@@ -151,7 +160,8 @@ const ShotGeneration: React.FC = () => {
               if (!role) break;
               const chunk = event.chunk as string;
               const isDone = event.done as boolean;
-              const agentKey = `${role}-${effectiveSceneIndex}`;
+              const eventSceneIndex = typeof event.scene_index === 'number' ? event.scene_index : effectiveSceneIndex;
+              const agentKey = `${role}-${eventSceneIndex}`;
 
               if (activeAgentMsg[agentKey] !== undefined) {
                 // Append to existing streaming message
@@ -162,7 +172,7 @@ const ShotGeneration: React.FC = () => {
                   let lastIdx = -1;
                   for (let i = updated.length - 1; i >= 0; i--) {
                     const m = updated[i];
-                    if (m.agent === role && m.sceneIndex === effectiveSceneIndex && m.streaming) {
+                    if (m.agent === role && m.sceneIndex === eventSceneIndex && m.streaming) {
                       lastIdx = i;
                       break;
                     }
@@ -178,7 +188,7 @@ const ShotGeneration: React.FC = () => {
                 const id = `msg-${++msgIdRef.current}`;
                 setDebateMessages((prev) => [
                   ...prev,
-                  { id, agent: role, text: chunk, sceneIndex: effectiveSceneIndex, streaming: !isDone },
+                  { id, agent: role, text: chunk, sceneIndex: eventSceneIndex, streaming: !isDone },
                 ]);
               }
 
@@ -201,17 +211,26 @@ const ShotGeneration: React.FC = () => {
               setComplete();
               // Build frames from accumulated params (not stale closure state)
               const frames: Frame[] = [];
-              Object.entries(accumulatedSceneParams).forEach(([sceneIdx]) => {
+              Object.entries(accumulatedSceneParams).forEach(([sceneIdx, params]) => {
                 const sIdx = Number(sceneIdx);
                 const scene = sceneList[sIdx];
                 if (!scene) return;
+                const rawCp = (params as Record<string, unknown>)?.['cinematographer_parameters'];
+                const cp = typeof rawCp === 'string' ? (() => { try { return JSON.parse(rawCp) as Record<string, unknown>; } catch { return undefined; } })() : (rawCp as Record<string, unknown> | undefined);
+                const paramsDisplay = cp
+                  ? [cp.focal_length_mm, cp.aperture_fstop, cp.color_temperature_kelvin].filter(Boolean).join(' ')
+                  : undefined;
+                const rawDp = (params as Record<string, unknown>)?.['director_parameters'];
+                const dp = typeof rawDp === 'string' ? (() => { try { return JSON.parse(rawDp) as Record<string, unknown>; } catch { return undefined; } })() : (rawDp as Record<string, unknown> | undefined);
+                const title = (dp?.story_beat_action as string) || scene.slugLine;
+                const desc = (dp?.directorial_intent as string) || scene.body || '';
                 frames.push({
                   id: `frame-${sIdx + 1}`,
                   sceneId: scene.id,
                   sceneNumber: scene.number,
                   frameNumber: sIdx + 1,
-                  title: scene.slugLine,
-                  description: scene.body || '',
+                  title: String(title).slice(0, 80) || scene.slugLine,
+                  description: String(desc).slice(0, 120) || scene.body || '',
                   characters: scene.characters,
                   duration: '—',
                   instantParams: { colorTemperature: 5600, contrast: 50, haze: 0, colorGrade: 'Neutral' },
@@ -222,6 +241,7 @@ const ShotGeneration: React.FC = () => {
                     lightQuality: 'Medium-Soft', era: 'Contemporary', setCondition: 'Clean',
                     movement: 'Static', aspectRatio: '2.39:1',
                   },
+                  paramsDisplay,
                 });
               });
               if (frames.length > 0) setFrames(frames);
@@ -244,29 +264,29 @@ const ShotGeneration: React.FC = () => {
     }
   }, [sceneList]);
 
-  const handleSceneClick = (idx: number) => {
-    setCurrentScene(idx);
-    setSelectedAgent(null);
-  };
-
   // ── Styles ──
   const page: React.CSSProperties = {
-    minHeight: '100vh',
+    height: '100vh',
+    overflow: 'hidden',
     backgroundImage: 'url(/images/background.avif)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundAttachment: 'fixed',
     fontFamily: '"Inter", system-ui, sans-serif',
     paddingTop: 80,
+    display: 'flex',
+    flexDirection: 'column',
   };
 
   const layout: React.CSSProperties = {
     display: 'flex',
     gap: 0,
+    flex: 1,
+    minHeight: 0,
     maxWidth: 1200,
     margin: '0 auto',
     padding: '0 24px 40px',
-    minHeight: 'calc(100vh - 80px)',
+    width: '100%',
   };
 
   /* ── Left sidebar ── */
@@ -291,6 +311,7 @@ const ShotGeneration: React.FC = () => {
   /* ── Main content ── */
   const mainArea: React.CSSProperties = {
     flex: 1,
+    minHeight: 0,
     background: 'rgba(255,255,255,0.12)',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
@@ -378,8 +399,8 @@ const ShotGeneration: React.FC = () => {
             })}
           </div>
 
-          {/* Scene list panel */}
-          <div style={{ ...sidebarCard, flex: 1 }}>
+          {/* Scene list panel — read-only, driven by debate flow */}
+          <div className="hide-scrollbar" style={{ ...sidebarCard, flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {Array.from({ length: totalScenes }, (_, i) => {
               const scene = sceneList[i];
               const isCompleted = completedScenes.includes(i);
@@ -387,26 +408,23 @@ const ShotGeneration: React.FC = () => {
               const isFuture = i > currentSceneIndex && !isCompleted;
 
               return (
-                <button
+                <div
                   key={i}
-                  onClick={() => handleSceneClick(i)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
                     width: '100%',
                     padding: '8px 10px',
-                    border: 'none',
                     borderRadius: 8,
                     background: isCurrent
                       ? 'rgba(196,114,75,0.08)'
                       : 'transparent',
-                    cursor: 'pointer',
                     transition: 'background 0.15s',
                     marginBottom: 2,
                   }}
                 >
-                  {/* Status dot */}
+                  {/* Status: checkmark when completed, dot when current, empty when pending */}
                   <div
                     style={{
                       width: 14,
@@ -426,7 +444,7 @@ const ShotGeneration: React.FC = () => {
                       flexShrink: 0,
                     }}
                   >
-                    {isCompleted && (
+                    {isCompleted ? (
                       <svg
                         width="8"
                         height="8"
@@ -439,8 +457,7 @@ const ShotGeneration: React.FC = () => {
                       >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
-                    )}
-                    {isCurrent && (
+                    ) : isCurrent ? (
                       <div
                         style={{
                           width: 6,
@@ -449,7 +466,7 @@ const ShotGeneration: React.FC = () => {
                           backgroundColor: '#C4724B',
                         }}
                       />
-                    )}
+                    ) : null}
                   </div>
 
                   <span
@@ -465,7 +482,7 @@ const ShotGeneration: React.FC = () => {
                       ? `Scene ${scene.number}: ${scene.location.charAt(0) + scene.location.slice(1).toLowerCase()}`
                       : `Scene ${i + 1}`}
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -561,8 +578,29 @@ const ShotGeneration: React.FC = () => {
                   Debating…
                 </span>
               )}
-              {isComplete && (
-                <span style={{ fontSize: 12, color: '#7A8B6F', fontWeight: 600 }}>✓ Complete</span>
+              {isComplete && completedScenes.length === totalScenes && totalScenes > 0 && (
+                <>
+                  <span style={{ fontSize: 12, color: '#7A8B6F', fontWeight: 600 }}>✓ Complete</span>
+                  <button
+                    onClick={() => navigate('/storyboard')}
+                    style={{
+                      padding: '8px 20px',
+                      backgroundColor: '#C4724B',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: '"Inter", system-ui, sans-serif',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    View Storyboard
+                  </button>
+                </>
               )}
               <span
                 style={{
@@ -587,11 +625,13 @@ const ShotGeneration: React.FC = () => {
             </div>
           )}
 
-          {/* Debate messages */}
+          {/* Debate messages — only this area scrolls (scrollbar hidden) */}
           <div
             ref={contentRef}
+            className="hide-scrollbar"
             style={{
               flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
               padding: '24px 28px',
             }}
@@ -655,7 +695,7 @@ const ShotGeneration: React.FC = () => {
                   {/* Message content — GenUi for params, plain text for discussion */}
                   <div style={{ paddingLeft: 16 }}>
                     {msg.text.startsWith('Set parameters:\n') ? (
-                      <GenUi data={{ type: 'params', content: msg.text }} />
+                      <GenUi data={{ type: 'params', content: msg.text, sceneNumber: msg.sceneIndex + 1 }} />
                     ) : (
                       <p
                         style={{
@@ -684,6 +724,8 @@ const ShotGeneration: React.FC = () => {
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes blink { 50% { opacity: 0; } }
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
   );

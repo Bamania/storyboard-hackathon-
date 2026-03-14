@@ -2,20 +2,9 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { useScreenplayStore } from '../../stores/screenplayStore';
+import { useStoryboardStore } from '../../stores/storyboardStore';
 import { mockScenes } from '../../data/mockScreenplay';
-
-/* ── Mock storyboard frames ── */
-interface StoryFrame {
-  id: string;
-  sceneId: string;
-  sceneNumber: number;
-  frameNumber: number;
-  title: string;
-  description: string;
-  lens: string;
-  aperture: string;
-  colorTemp: string;
-}
+import type { Frame } from '../../types';
 
 const SCENE_COLORS: Record<number, string> = {
   1: '#8B3A2A',
@@ -28,24 +17,10 @@ const SCENE_COLORS: Record<number, string> = {
   8: '#4A5A3C',
 };
 
-const MOCK_FRAMES: StoryFrame[] = [
-  { id: 'f1', sceneId: 'scene-1', sceneNumber: 1, frameNumber: 1, title: 'City Wide', description: 'Rain-slicked street, neon...', lens: '24mm', aperture: 'f/2.8', colorTemp: '3200K' },
-  { id: 'f2', sceneId: 'scene-1', sceneNumber: 1, frameNumber: 2, title: 'Tracking Entrance', description: 'Protagonist enters frame from left', lens: '35mm', aperture: 'f/2.0', colorTemp: '3200K' },
-  { id: 'f3', sceneId: 'scene-2', sceneNumber: 2, frameNumber: 3, title: 'Close Up', description: 'Golden amber backlighting', lens: '85mm', aperture: 'f/1.4', colorTemp: '2800K' },
-  { id: 'f4', sceneId: 'scene-2', sceneNumber: 2, frameNumber: 4, title: 'Over the Shoulder', description: 'Barman pouring drink', lens: '50mm', aperture: 'f/1.8', colorTemp: '2800K' },
-  { id: 'f5', sceneId: 'scene-5', sceneNumber: 5, frameNumber: 5, title: 'Top Down', description: 'Harsh clinical fluorescent light', lens: '18mm', aperture: 'f/4.0', colorTemp: '5600K' },
-  { id: 'f6', sceneId: 'scene-5', sceneNumber: 5, frameNumber: 6, title: 'Extreme CU', description: 'Eye reflecting swinging lamp', lens: '100mm', aperture: 'f/2.8', colorTemp: '5600K' },
-  { id: 'f7', sceneId: 'scene-8', sceneNumber: 8, frameNumber: 7, title: 'Establishing Shot', description: 'Sun breaking over horizon', lens: '24mm', aperture: 'f/11', colorTemp: '4500K' },
-  { id: 'f8', sceneId: 'scene-8', sceneNumber: 8, frameNumber: 8, title: 'Silhouette', description: 'Walking away into the light', lens: '50mm', aperture: 'f/1.2', colorTemp: '4500K' },
-  { id: 'f9', sceneId: 'scene-1', sceneNumber: 1, frameNumber: 9, title: 'Low Angle', description: 'Rain hitting boots on pavement', lens: '35mm', aperture: 'f/4.0', colorTemp: '3200K' },
-  { id: 'f10', sceneId: 'scene-2', sceneNumber: 2, frameNumber: 10, title: 'Reaction Shot', description: 'Sudden realization', lens: '85mm', aperture: 'f/1.8', colorTemp: '2800K' },
-  { id: 'f11', sceneId: 'scene-5', sceneNumber: 5, frameNumber: 11, title: 'Profile', description: 'Shadow split across face', lens: '50mm', aperture: 'f/2.0', colorTemp: '5600K' },
-  { id: 'f12', sceneId: 'scene-8', sceneNumber: 8, frameNumber: 12, title: 'Final Horizon', description: 'Wide sweep of the landscape', lens: '14mm', aperture: 'f/8.0', colorTemp: '4500K' },
-];
-
 const Storyboard: React.FC = () => {
   const { completeStep } = useNavigationStore();
   const { scenes } = useScreenplayStore();
+  const { frames } = useStoryboardStore();
   useEffect(() => { completeStep(4); }, []);
 
   const sceneList = scenes.length > 0 ? scenes : mockScenes;
@@ -55,15 +30,15 @@ const Storyboard: React.FC = () => {
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  const filteredFrames = activeFilter
-    ? MOCK_FRAMES.filter((f) => {
+  const filteredFrames: Frame[] = activeFilter
+    ? frames.filter((f) => {
         const scene = sceneList.find((s) => s.id === f.sceneId);
         return scene?.location === activeFilter;
       })
-    : MOCK_FRAMES;
+    : frames;
 
-  const totalFrames = MOCK_FRAMES.length;
-  const totalScenes = new Set(MOCK_FRAMES.map((f) => f.sceneNumber)).size;
+  const totalFrames = frames.length;
+  const totalScenes = frames.length > 0 ? new Set(frames.map((f) => f.sceneNumber)).size : 0;
 
   /* ── Styles ── */
   const page: React.CSSProperties = {
@@ -261,39 +236,53 @@ const Storyboard: React.FC = () => {
 
         {/* Frame grid */}
         <div style={gridStyle}>
-          {filteredFrames.map((frame) => (
+          {filteredFrames.length === 0 ? (
             <div
-              key={frame.id}
-              style={cardStyle}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)';
-                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.12)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+              style={{
+                gridColumn: '1 / -1',
+                textAlign: 'center',
+                padding: '80px 24px',
+                color: '#8A7E72',
+                fontFamily: '"Playfair Display", Georgia, serif',
+                fontStyle: 'italic',
+                fontSize: 16,
               }}
             >
-              {/* Color placeholder */}
-              <div style={placeholderStyle(frame.sceneNumber)}>
-                <span style={badgeStyle(frame.sceneNumber)}>SC{frame.sceneNumber}</span>
-                <span style={frameNumStyle}>
-                  {String(frame.frameNumber).padStart(2, '0')}
-                </span>
-              </div>
+              No storyboard frames yet. Complete the crew debate on the Shots page to generate frames.
+            </div>
+          ) : (
+            filteredFrames.map((frame) => (
+              <div
+                key={frame.id}
+                style={cardStyle}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)';
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.12)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+                }}
+              >
+                {/* Color placeholder (image slot for future generation) */}
+                <div style={placeholderStyle(frame.sceneNumber)}>
+                  <span style={badgeStyle(frame.sceneNumber)}>SC{frame.sceneNumber}</span>
+                  <span style={frameNumStyle}>
+                    {String(frame.frameNumber).padStart(2, '0')}
+                  </span>
+                </div>
 
-              {/* Card body */}
-              <div style={cardBodyStyle}>
-                <p style={frameTitleStyle}>{frame.title}</p>
-                <p style={frameDescStyle}>{frame.description}</p>
-                <div style={techRowStyle}>
-                  <span>{frame.lens}</span>
-                  <span>{frame.aperture}</span>
-                  <span>{frame.colorTemp}</span>
+                {/* Card body */}
+                <div style={cardBodyStyle}>
+                  <p style={frameTitleStyle}>{frame.title}</p>
+                  <p style={frameDescStyle}>{frame.description}</p>
+                  {frame.paramsDisplay && (
+                    <div style={techRowStyle}>{frame.paramsDisplay}</div>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Footer */}
