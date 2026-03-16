@@ -115,7 +115,7 @@ export interface ChatMessage {
 }
 
 // ─── Navigation ──────────────────────────────────────
-export type AppStep = 1 | 2 | 3 | 4;
+export type AppStep = 0 | 1 | 2 | 3 | 4;
 
 export interface StepInfo {
   step: AppStep;

@@ -2,10 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import { useStoryStore } from '../../stores/storyStore';
-import { useScreenplayStore } from '../../stores/screenplayStore';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { agents } from '../../theme/tokens';
-import { mockScenes } from '../../data/mockScreenplay';
 
 
 /**
@@ -14,19 +12,14 @@ import { mockScenes } from '../../data/mockScreenplay';
  */
 const StoryInput = () => {
   const navigate = useNavigate();
-  const { storyText, isGenerating, setStoryText, startGenerating } = useStoryStore();
-  const { setScenes } = useScreenplayStore();
+  const { storyText, setStoryText } = useStoryStore();
   const { setCurrentStep, completeStep } = useNavigationStore();
 
   const handleGenerate = () => {
     if (!storyText.trim()) return;
-    startGenerating();
-    setTimeout(() => {
-      setScenes(mockScenes);
-      completeStep(1);
-      setCurrentStep(2);
-      navigate('/screenplay');
-    }, 2000);
+    completeStep(1);
+    setCurrentStep(2);
+    navigate('/genre');
   };
 
   const crewBadges = [
@@ -197,25 +190,6 @@ const StoryInput = () => {
     opacity: 0.85,
   };
 
-  const btnGenerating: React.CSSProperties = {
-    ...btnBase,
-    backgroundColor: '#F0E2D0',
-    color: '#A07856',
-    cursor: 'not-allowed',
-    border: '1px solid #E0CEB8',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-  };
-
-  const spinnerStyle: React.CSSProperties = {
-    width: '18px',
-    height: '18px',
-    border: '2.5px solid #E0CEB8',
-    borderTop: '2.5px solid #A07856',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-    flexShrink: 0,
-  };
-
   const cardsRow: React.CSSProperties = {
     display: 'flex',
     flexWrap: 'wrap',
@@ -348,7 +322,6 @@ const StoryInput = () => {
             }
           }}
           placeholder="A noir detective story set in a rain-soaked city at night..."
-          disabled={isGenerating}
           style={textareaStyle}
         />
 
@@ -367,21 +340,14 @@ const StoryInput = () => {
         {/* Standby text */}
         <p style={standbyText}>Your crew is standing by</p>
 
-        {/* Generate button */}
-        {isGenerating ? (
-          <button disabled style={btnGenerating}>
-            Generating screenplay...
-            <span style={spinnerStyle} />
-          </button>
-        ) : (
-          <button
-            disabled={!storyText.trim()}
-            onClick={handleGenerate}
-            style={storyText.trim() ? btnEnabled : btnDisabled}
-          >
-            Generate Screenplay →
-          </button>
-        )}
+        {/* Next button */}
+        <button
+          disabled={!storyText.trim()}
+          onClick={handleGenerate}
+          style={storyText.trim() ? btnEnabled : btnDisabled}
+        >
+          Next →
+        </button>
 
         {/* Feature cards */}
         <div style={cardsRow}>
