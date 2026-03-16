@@ -244,8 +244,24 @@ debateRouter.post('/', async (req, res) => {
 
     sendEvent({ type: 'done' });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[Debate] Error:', err);
-    sendEvent({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
+    // ADK may throw "Cannot read properties of undefined (reading 'skipSummarization')" when
+    // run completes — workaround: still send done so the UI shows completion; don't surface this
+    // internal error to the user.
+    if (msg.includes('skipSummarization')) {
+      if (effectiveStoryboardId) {
+        try {
+          await completeStoryboard(effectiveStoryboardId);
+          console.log(`[Debate] Marked Storyboard #${effectiveStoryboardId} as COMPLETE (after skipSummarization workaround)`);
+        } catch (e) {
+          console.error('[Debate] completeStoryboard after workaround:', e);
+        }
+      }
+      sendEvent({ type: 'done' });
+    } else {
+      sendEvent({ type: 'error', message: msg });
+    }
   } finally {
     res.end();
   }

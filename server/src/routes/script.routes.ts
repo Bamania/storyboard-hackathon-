@@ -95,10 +95,6 @@ scriptRouter.post('/generate-and-parse', async (req, res) => {
 
     const storyboard = await createStoryboard(prompt.trim(), script, characters, scenes);
 
-    console.log(
-      `[GenerateAndParse] Persisted Storyboard #${storyboard.id} with ${storyboard.scenes.length} scenes, ${storyboard.cast.length} cast members`,
-    );
-
     res.json({
       storyboardId: storyboard.id,
       script,

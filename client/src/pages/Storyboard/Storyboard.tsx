@@ -1,10 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { useScreenplayStore } from '../../stores/screenplayStore';
 import { useStoryboardStore } from '../../stores/storyboardStore';
+import { useStoryStore } from '../../stores/storyStore';
 import { mockScenes } from '../../data/mockScreenplay';
 import type { Frame } from '../../types';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+interface ArtboardData {
+  id: number;
+  status: string;
+  imageUrl: string | null;
+  directorParams?: Record<string, unknown>;
+  cinematographerParams?: Record<string, unknown>;
+  scene?: { slug: string; body: string; position: number };
+}
+
+interface SceneWithArtboards {
+  id: number;
+  slug: string;
+  body: string;
+  position: number;
+  artboards: ArtboardData[];
+}
+
+interface StoryboardData {
+  id: number;
+  scenes: SceneWithArtboards[];
+}
 
 const SCENE_COLORS: Record<number, string> = {
   1: '#8B3A2A',
@@ -21,15 +46,100 @@ const Storyboard: React.FC = () => {
   const { completeStep } = useNavigationStore();
   const { scenes } = useScreenplayStore();
   const { frames } = useStoryboardStore();
+  const { storyboardId } = useStoryStore();
   useEffect(() => { completeStep(4); }, []);
+
+  const [storyboard, setStoryboard] = useState<StoryboardData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
+  const [error, setError] = useState<string | null>(null);
 
   const sceneList = scenes.length > 0 ? scenes : mockScenes;
 
+  useEffect(() => {
+    if (!storyboardId || !Number.isFinite(storyboardId)) return;
+    setLoading(true);
+    setError(null);
+    fetch(`${API_BASE}/api/storyboards/${storyboardId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch storyboard');
+        return res.json();
+      })
+      .then((data) => {
+        setStoryboard(data);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load storyboard');
+      })
+      .finally(() => setLoading(false));
+  }, [storyboardId]);
+
+  const generateImage = useCallback(async (artboardId: number) => {
+    setGeneratingIds((prev) => new Set(prev).add(artboardId));
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/img-gen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artboardId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.imageUrl && storyboard) {
+        setStoryboard((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            scenes: prev.scenes.map((s) => ({
+              ...s,
+              artboards: s.artboards.map((a) =>
+                a.id === artboardId ? { ...a, imageUrl: data.imageUrl, status: 'DONE' } : a
+              ),
+            })),
+          };
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Image generation failed');
+    } finally {
+      setGeneratingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(artboardId);
+        return next;
+      });
+    }
+  }, [storyboard]);
+
+  /* Artboards from fetched storyboard (preferred when storyboardId exists) */
+  const artboardCards = storyboard
+    ? storyboard.scenes.flatMap((scene, idx) =>
+        (scene.artboards ?? []).map((artboard, aIdx) => ({
+          artboard,
+          scene,
+          sceneNumber: scene.position + 1,
+          frameNumber: idx * 10 + aIdx + 1,
+        }))
+      )
+    : [];
+
   /* Derive unique locations for filter pills */
-  const locations = Array.from(new Set(sceneList.map((s) => s.location)));
+  const locations = storyboard
+    ? Array.from(new Set(storyboard.scenes.map((s) => s.slug.split(' - ')[0] || s.slug)))
+    : Array.from(new Set(sceneList.map((s) => s.location)));
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
+  const filteredArtboards = activeFilter
+    ? artboardCards.filter((c) => {
+        const loc = c.scene.slug.split(' - ')[0] || c.scene.slug;
+        return loc === activeFilter;
+      })
+    : artboardCards;
+
+  /* Fallback: frames from store when no storyboard fetched */
   const filteredFrames: Frame[] = activeFilter
     ? frames.filter((f) => {
         const scene = sceneList.find((s) => s.id === f.sceneId);
@@ -37,8 +147,13 @@ const Storyboard: React.FC = () => {
       })
     : frames;
 
-  const totalFrames = frames.length;
-  const totalScenes = frames.length > 0 ? new Set(frames.map((f) => f.sceneNumber)).size : 0;
+  const useArtboards = storyboard && artboardCards.length > 0;
+  const totalFrames = useArtboards ? artboardCards.length : frames.length;
+  const totalScenes = useArtboards
+    ? new Set(artboardCards.map((c) => c.sceneNumber)).size
+    : frames.length > 0
+      ? new Set(frames.map((f) => f.sceneNumber)).size
+      : 0;
 
   /* ── Styles ── */
   const page: React.CSSProperties = {
@@ -215,6 +330,23 @@ const Storyboard: React.FC = () => {
           <button style={exportBtn}>Export</button>
         </div>
 
+        {/* Error */}
+        {error && (
+          <div
+            style={{
+              padding: '12px 20px',
+              marginBottom: 16,
+              color: '#D04040',
+              fontSize: 13,
+              background: 'rgba(208,64,64,0.06)',
+              borderRadius: 8,
+              border: '1px solid rgba(208,64,64,0.2)',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         {/* Filter pills */}
         <div style={pillRow}>
           <button
@@ -236,7 +368,125 @@ const Storyboard: React.FC = () => {
 
         {/* Frame grid */}
         <div style={gridStyle}>
-          {filteredFrames.length === 0 ? (
+          {loading ? (
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                textAlign: 'center',
+                padding: '80px 24px',
+                color: '#8A7E72',
+                fontFamily: '"Playfair Display", Georgia, serif',
+                fontStyle: 'italic',
+                fontSize: 16,
+              }}
+            >
+              Loading storyboard…
+            </div>
+          ) : useArtboards && filteredArtboards.length === 0 ? (
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                textAlign: 'center',
+                padding: '80px 24px',
+                color: '#8A7E72',
+                fontFamily: '"Playfair Display", Georgia, serif',
+                fontStyle: 'italic',
+                fontSize: 16,
+              }}
+            >
+              No artboards yet. Complete the crew debate on the Shots page first.
+            </div>
+          ) : useArtboards ? (
+            filteredArtboards.map(({ artboard, scene, sceneNumber, frameNumber }) => {
+              const toObj = (v: unknown): Record<string, unknown> => {
+                if (!v) return {};
+                if (typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
+                if (typeof v === 'string') {
+                  try { return JSON.parse(v) as Record<string, unknown>; } catch { return {}; }
+                }
+                return {};
+              };
+              const dp = toObj(artboard.directorParams);
+              const cp = toObj(artboard.cinematographerParams);
+              const title = (dp.story_beat_action as string) || scene.slug;
+              const desc = (dp.directorial_intent as string) || scene.body || '';
+              const paramsDisplay = [cp.focal_length_mm, cp.aperture_fstop, cp.color_temperature_kelvin]
+                .filter(Boolean)
+                .join(' ') || undefined;
+              const canGenerate = artboard.status === 'PARAMS_READY';
+              const isGenerating = generatingIds.has(artboard.id);
+              const hasImage = artboard.status === 'DONE' && artboard.imageUrl;
+
+              return (
+                <div
+                  key={artboard.id}
+                  style={cardStyle}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)';
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.12)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={placeholderStyle(sceneNumber)}>
+                    <span style={badgeStyle(sceneNumber)}>SC{sceneNumber}</span>
+                    {hasImage ? (
+                      <img
+                        src={artboard.imageUrl!}
+                        alt={title}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    ) : (
+                      <span style={frameNumStyle}>
+                        {String(frameNumber).padStart(2, '0')}
+                      </span>
+                    )}
+                  </div>
+                  <div style={cardBodyStyle}>
+                    <p style={frameTitleStyle}>{title}</p>
+                    <p style={frameDescStyle}>{String(desc).slice(0, 120)}</p>
+                    {paramsDisplay && <div style={techRowStyle}>{paramsDisplay}</div>}
+                    {canGenerate && (
+                      <button
+                        onClick={() => generateImage(artboard.id)}
+                        disabled={isGenerating}
+                        style={{
+                          marginTop: 10,
+                          padding: '8px 16px',
+                          backgroundColor: isGenerating ? '#8A7E72' : '#C4724B',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: isGenerating ? 'not-allowed' : 'pointer',
+                          fontFamily: '"Inter", system-ui, sans-serif',
+                        }}
+                      >
+                        {isGenerating ? 'Generating…' : 'Generate Image'}
+                      </button>
+                    )}
+                    {artboard.status === 'GENERATING' && (
+                      <span style={{ fontSize: 12, color: '#C4724B', fontWeight: 600, marginTop: 8, display: 'block' }}>
+                        Generating…
+                      </span>
+                    )}
+                    {artboard.status === 'FAILED' && (
+                      <span style={{ fontSize: 12, color: '#D04040', marginTop: 8, display: 'block' }}>
+                        Generation failed
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : filteredFrames.length === 0 ? (
             <div
               style={{
                 gridColumn: '1 / -1',
@@ -264,15 +514,12 @@ const Storyboard: React.FC = () => {
                   (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
                 }}
               >
-                {/* Color placeholder (image slot for future generation) */}
                 <div style={placeholderStyle(frame.sceneNumber)}>
                   <span style={badgeStyle(frame.sceneNumber)}>SC{frame.sceneNumber}</span>
                   <span style={frameNumStyle}>
                     {String(frame.frameNumber).padStart(2, '0')}
                   </span>
                 </div>
-
-                {/* Card body */}
                 <div style={cardBodyStyle}>
                   <p style={frameTitleStyle}>{frame.title}</p>
                   <p style={frameDescStyle}>{frame.description}</p>

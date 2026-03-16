@@ -7,8 +7,11 @@ import { useShotStore } from '../../stores/shotStore';
 import { useNavigationStore } from '../../stores/navigationStore';
 import { useStoryboardStore } from '../../stores/storyboardStore';
 import { useStoryStore } from '../../stores/storyStore';
+import { useQueueStore } from '../../stores/queueStore';
+import { processImageGenerationQueue } from '../../services/imageGenerationService';
 import { agentColors } from '../../theme/tokens';
 import type { AgentRole, Frame } from '../../types';
+import type { DebateMessage } from './types';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
@@ -36,18 +39,25 @@ function toAgentRole(agent: string): AgentRole | null {
   return map[agent] || null;
 }
 
-interface DebateMessage {
-  id: string;
-  agent: AgentRole;
-  text: string;
-  sceneIndex: number;
-  streaming?: boolean;
-}
-
 const ShotGeneration: React.FC = () => {
   const navigate = useNavigate();
   const { completeStep } = useNavigationStore();
   useEffect(() => { completeStep(3); }, []);
+  
+  // Subscribe to queue store - separate selectors to prevent infinite loop
+  const queueItems = useQueueStore((state) => state.queueItems);
+  const isProcessing = useQueueStore((state) => state.isProcessing);
+
+  // Auto-start image generation when queue has items and processing isn't already running
+  useEffect(() => {
+    if (queueItems.length > 0 && !isProcessing) {
+      console.log(`[ShotGeneration] Queue has ${queueItems.length} items. Starting image generation...`);
+      processImageGenerationQueue().catch((err) => {
+        console.error('[ShotGeneration] Image generation error:', err);
+      });
+    }
+  }, [queueItems.length, isProcessing]);
+
   const { scenes } = useScreenplayStore();
   const {
     currentSceneIndex,
@@ -62,10 +72,11 @@ const ShotGeneration: React.FC = () => {
   } = useShotStore();
   const { setFrames } = useStoryboardStore();
   const { storyboardId, setStoryboardId } = useStoryStore();
+  const { addToQueue } = useQueueStore();
 
   const [selectedAgent, setSelectedAgent] = useState<AgentRole | null>(null);
   const [debateMessages, setDebateMessages] = useState<DebateMessage[]>([]);
-  const [sceneParams, setSceneParams] = useState<Record<number, Record<string, unknown>>>({});
+  const [, setSceneParams] = useState<Record<number, Record<string, unknown>>>({});
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -204,6 +215,27 @@ const ShotGeneration: React.FC = () => {
                 const params = event.shot_parameters as Record<string, unknown>;
                 accumulatedSceneParams[idx] = params;
                 setSceneParams((prev) => ({ ...prev, [idx]: params }));
+
+                // Extract and push parameters to queue
+                const parseParam = (raw: unknown): object => {
+                  if (typeof raw === 'string') {
+                    try {
+                      return JSON.parse(raw) as object;
+                    } catch {
+                      return {};
+                    }
+                  }
+                  return (raw as object) || {};
+                };
+
+                addToQueue({
+                  scene: idx + 1, // Convert 0-indexed to 1-indexed scene number
+                  storyboardId: storyboardId || 0, // Pass storyboard ID
+                  directorParams: parseParam(params['director_parameters']),
+                  cinematographerParams: parseParam(params['cinematographer_parameters']),
+                  productionDesignerParams: parseParam(params['production_designer_parameters']),
+                  editorParams: parseParam(params['editor_parameters']),
+                });
               }
               break;
             }
@@ -578,7 +610,7 @@ const ShotGeneration: React.FC = () => {
                   Debating…
                 </span>
               )}
-              {isComplete && completedScenes.length === totalScenes && totalScenes > 0 && (
+              {isComplete && totalScenes > 0 && (
                 <>
                   <span style={{ fontSize: 12, color: '#7A8B6F', fontWeight: 600 }}>✓ Complete</span>
                   <button
